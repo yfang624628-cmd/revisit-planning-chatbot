@@ -53,5 +53,3 @@ export function proposalsFor(city,revisit={},excluded=[]){
     return {...item,score};
   }).sort((left,right)=>right.score-left.score).slice(0,3).map(({score,...item})=>item);
 }
-
-export function catalogItem(id){return revisitCatalog.find(item=>item.id===id)||null;}
