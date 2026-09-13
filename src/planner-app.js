@@ -1,17 +1,25 @@
 import {examples} from './examples.js';
 
 const root=document.querySelector('#newBody');root.id='planner';
-const emptyState=()=>({sessionId:null,slots:null,revisit:null,phase:'collecting',proposals:[],selectedProposal:null,plan:null,lockedDays:[],confirmed:false,baseBudget:null,answer:''});
+const emptyState=()=>({sessionId:null,slots:null,revisit:null,phase:'collecting',proposals:[],selectedProposal:null,plan:null,lockedDays:[],confirmed:false,baseBudget:null,messages:[],answer:''});
 let state=emptyState();
 let busy=false,error='',draft='',budgetDraft=null,localAction=false;
 let cardNotice=null,noticeTimer=null;
 let routes={},routeLoading=null,routeErrors={};
 const storageKey='travel-revisit-session-v1';
-try{const saved=JSON.parse(sessionStorage.getItem(storageKey)||'null');if(saved?.sessionId)state=saved;}catch{}
+try{const saved=JSON.parse(sessionStorage.getItem(storageKey)||'null');if(saved?.sessionId)state={...emptyState(),...saved,messages:Array.isArray(saved.messages)?saved.messages.slice(-40):[]};}catch{}
 const escape=value=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const money=value=>'¥'+Number(value).toLocaleString('zh-CN');
 const daySignature=day=>JSON.stringify(day||null);
 const dayCost=day=>day?Object.values(day.cost).reduce((sum,value)=>sum+value,0):0;
+function addMessage(role,content){
+  if(!['user','assistant'].includes(role)||typeof content!=='string'||!content.trim())return;
+  state.messages=[...(state.messages||[]),{role,content:content.trim()}].slice(-40);
+}
+function historyView(){
+  if(!state.messages?.length)return '';
+  return `<div class="chat-history" aria-label="聊天记录">${state.messages.map(message=>`<div class="chat-message ${message.role}"><strong>${message.role==='user'?'你':'助手'}</strong><p>${escape(message.content)}</p></div>`).join('')}</div>`;
+}
 function dayChangeNotice(before,after){
   if(daySignature(before)===daySignature(after))return '本次安排没有变化。';
   const changes=[];
@@ -108,16 +116,18 @@ function planView(){
 function render(){
   const intro=!state.sessionId;
   const showChat=intro||state.phase!=='confirming';
-  const staleReply=state.plan&&state.reply==='信息够了，核对一下就能生成第一版。';
-  const feedback=busy&&!localAction?'正在回复，请稍候；原方案会保留。':error||(staleReply?'':state.reply)||'';
+  const feedback=busy&&!localAction?'正在回复，请稍候；原方案会保留。':error;
   const heading=intro?'这次，想换个玩法吗？':state.plan?'想改哪里，或者有什么想问的？':state.phase==='exploring'?'这几个方向哪里对，哪里不对？':'补充一下，就能开始安排';
   const placeholder=state.plan?'例如：第二天太赶了；这个安排适合带爸妈吗？':state.phase==='exploring'?'例如：第二个不错，但不想逛展；或者：选第二个':'说说去哪、玩多久、几个人、当地预算，以及哪些不想重复…';
-  const chat=showChat?`<div class="${intro?'welcome':'conversation'}"><h2 id="chat-heading">${heading}</h2>${intro?'<div class="chips examples">'+examples.map(example=>button(example.label,'example','data-message="'+escape(example.message)+'"')).join('')+'</div>':''}<div id="feedback" role="status" aria-live="polite" ${!feedback?'hidden':''}>${escape(feedback)}</div><form id="chat" aria-labelledby="chat-heading"><textarea aria-labelledby="chat-heading" name="message" rows="2" maxlength="1800" required placeholder="${placeholder}">${escape(draft)}</textarea><button class="primary">发送</button></form></div>`:'';
+  const chat=showChat?`<div class="${intro?'welcome':'conversation'}"><h2 id="chat-heading">${heading}</h2>${intro?'<div class="chips examples">'+examples.map(example=>button(example.label,'example','data-message="'+escape(example.message)+'"')).join('')+'</div>':''}${historyView()}<div id="feedback" role="status" aria-live="polite" ${!feedback?'hidden':''}>${escape(feedback)}</div><form id="chat" aria-labelledby="chat-heading"><textarea aria-labelledby="chat-heading" name="message" rows="2" maxlength="1800" required placeholder="${placeholder}">${escape(draft)}</textarea><button class="primary">发送</button></form></div>`:'';
   root.innerHTML=`${state.sessionId?'<div class="topline">'+button('重新开始','reset')+'</div>':''}${chat}${state.slots&&!state.confirmed?slotsView():''}${proposalsView()}${state.plan?planView():''}`;
   if(busy)root.querySelectorAll('button,input,select,textarea').forEach(element=>element.disabled=true);
 }
 async function request(action,extra={}){
-  if(busy)return;busy=true;error='';localAction=['lock','resume','day'].includes(action);
+  if(busy)return;
+  if(action==='message')addMessage('user',extra.displayMessage||extra.message);
+  if(action==='proposal')addMessage('user','选择玩法：'+(state.proposals.find(item=>item.id===extra.proposalId)?.title||'当前方向'));
+  busy=true;error='';localAction=['lock','resume','day'].includes(action);
   if(action==='day'){clearTimeout(noticeTimer);cardNotice={day:extra.day,text:'正在调整这一天…'};}
   render();
   if(!localAction)root.querySelector('#feedback')?.scrollIntoView({block:'nearest'});
@@ -126,7 +136,9 @@ async function request(action,extra={}){
     const result=await response.json();if(!response.ok)throw new Error(result.error||'请求失败');
     const previousReply=state.reply||'';
     const previousPlan=state.plan;
-    state={...result,reply:localAction?previousReply:result.answer};
+    const messages=state.messages;
+    state={...result,messages,reply:localAction?previousReply:result.answer};
+    if(!localAction&&action!=='resume')addMessage('assistant',result.answer);
     for(const key of new Set([...Object.keys(routes),...Object.keys(routeErrors)]))if(daySignature(previousPlan?.days[key])!==daySignature(state.plan?.days[key])){delete routes[key];delete routeErrors[key];}
     if(action==='message')draft='';
     if(action!=='lock'&&action!=='resume')budgetDraft=null;
@@ -137,7 +149,7 @@ async function request(action,extra={}){
     const message=problem.name==='TimeoutError'?'请求超时，原方案没有改变，请重试。':problem.message;
     if(action==='day')showCardNotice(extra.day,message);else error=message;
   }
-  finally{busy=false;render();if(!localAction&&(error||state.reply))root.querySelector('#feedback')?.scrollIntoView({block:'nearest'});localAction=false;}
+  finally{busy=false;try{sessionStorage.setItem(storageKey,JSON.stringify(state));}catch{}render();if(!localAction&&(error||state.reply))root.querySelector('.chat-history')?.scrollTo({top:100000});localAction=false;}
 }
 async function requestRoute(day){
   if(routeLoading!==null)return;
@@ -156,7 +168,7 @@ root.addEventListener('submit',event=>{event.preventDefault();if(busy)return;con
 root.addEventListener('click',event=>{
   const target=event.target.closest('[data-action]');if(!target||busy)return;const {action,message,day,proposalId}=target.dataset;
   if(action==='example'){draft=message;render();root.querySelector('textarea').focus();}
-  if(action==='adjust')request('message',{message});
+  if(action==='adjust')request('message',{message,displayMessage:target.textContent});
   if(action==='day')request('day',{day:Number(day),message});
   if(action==='lock')request('lock',{day:Number(day)});
   if(action==='budget')request('budget',{budget:budgetDraft??state.slots.budget});
