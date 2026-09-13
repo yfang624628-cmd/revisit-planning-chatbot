@@ -1,12 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {plannerAPI,routeForDay,validatePlan} from '../planner-api.js';
+import {revisitCatalog,supportedCities} from '../revisit-catalog.js';
 
 const slots={mode:'trip',destination:'香港',origin:'深圳',date:'',days:2,people:2,budget:8000,scope:'total'};
 const revisit={visitedBefore:true,wantsIdeas:false,direction:'街区慢逛',avoid:[],revisit:[],liked:[],interests:['街区'],pace:'',mobility:''};
 const extracted=()=>({slots,revisit});
 const day=name=>({title:name,city:'香港',stops:[{time:'10:00',name,note:'慢慢游览'}],hotel:'港铁站附近住宿',food:'附近简餐',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}});
 const plan={title:'香港两天',days:[day('大坑'),day('深水埗')]};
+test('每座支持城市提供八个可组合锚点',()=>{
+  for(const city of supportedCities)assert.equal(revisitCatalog.filter(item=>item.city===city).length,8);
+  assert.equal(new Set(revisitCatalog.map(item=>item.id)).size,revisitCatalog.length);
+});
 test('只接受当前六座城市，并继续追问再访经历',async()=>{
   const unsupported=await plannerAPI({message:'两个人去巴黎玩三天，预算5000'},{callModel:async()=>({slots:{...slots,destination:'巴黎',days:3},revisit:{visitedBefore:true,wantsIdeas:true}})});
   assert.match(unsupported.answer,/目前支持香港、上海、深圳、柏林、米兰和马德里/);
@@ -44,6 +49,18 @@ test('没想法的再访用户先选玩法，再保留锚点生成行程',async(
   const finished=await plannerAPI({sessionId:first.sessionId,action:'proposal',proposalId:selected.id},{callModel:async()=>structuredClone(generated)});
   assert.equal(finished.phase,'planned');assert.equal(finished.selectedProposal.id,selected.id);
   assert.ok(finished.plan.days.some(item=>item.stops.some(stop=>stop.mapQuery===selected.mapQuery)));
+});
+test('方向卡由模型改写，但只能引用候选池锚点',async()=>{
+  const first=await plannerAPI({message:'香港去过两次，先给我方向'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true}})});
+  const explored=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>({proposals:[
+    {anchorId:'hk-peng-chau',title:'今天离开市区',supporting:['坐船','慢走'],novelty:'换成离岛节奏',tradeoff:'需要看船班'},
+    {anchorId:'hk-kowloon-city',title:'围绕一顿饭逛旧城',supporting:['旧城','吃饭'],novelty:'从城市历史进入',tradeoff:'需要公交'},
+    {anchorId:'not-in-catalog',title:'虚构方向',supporting:['未知'],novelty:'未知',tradeoff:'未知'}
+  ]})});
+  assert.equal(explored.proposals.length,3);
+  assert.equal(explored.proposals[0].id,'hk-peng-chau');
+  assert.equal(explored.proposals[0].title,'今天离开市区');
+  assert.ok(explored.proposals.every(item=>revisitCatalog.some(anchor=>anchor.id===item.id)));
 });
 test('按卡片顺序定位地点并返回真实道路折线',async()=>{
   const routeDay={city:'测试城',stops:[{name:'甲'},{name:'乙'},{name:'未找到'}]};
