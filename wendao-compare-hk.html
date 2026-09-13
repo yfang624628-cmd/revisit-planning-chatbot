@@ -1,0 +1,416 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>问道 · 输出形态改版对照（香港）</title>
+<style>
+  :root{
+    --brand:#2577E3; --brand-d:#1B5FBF; --navy:#16305C;
+    --bg:#EEF1F6; --card:#FFFFFF; --line:#E3E7EE;
+    --ink:#1A1D21; --ink-2:#6B7480; --ink-3:#9AA3AE;
+    --price:#FF6B00; --ok:#00A870; --warn:#E5484D;
+    --sans:"PingFang SC","Hiragino Sans GB","Microsoft YaHei","Noto Sans SC",system-ui,sans-serif;
+    --mono:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--sans);background:var(--bg);color:var(--ink);padding:36px 20px 70px}
+  .wrap{max-width:960px;margin:0 auto}
+
+  .kicker{font-family:var(--mono);font-size:11px;letter-spacing:.2em;color:var(--brand);margin:0 0 12px}
+  h1{font-size:34px;font-weight:800;letter-spacing:-.02em;margin:0 0 12px;line-height:1.25}
+  .claim{font-size:16px;line-height:1.75;color:#39424D;max-width:60ch;margin:0 0 8px}
+  .claim b{color:var(--ink)}
+  .note{font-size:13px;color:var(--ink-3);margin:14px 0 26px;line-height:1.7}
+
+  .tabs{display:flex;gap:8px;margin-bottom:22px;flex-wrap:wrap}
+  .tabs button{
+    font-family:var(--sans);font-size:14px;padding:10px 18px;border-radius:10px;cursor:pointer;
+    background:#fff;border:1px solid var(--line);color:var(--ink-2);
+  }
+  .tabs button[aria-current="true"]{background:var(--brand);border-color:var(--brand);color:#fff;font-weight:600}
+  .tabs button:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+  .pair{display:grid;grid-template-columns:1fr 1fr;gap:22px;align-items:start}
+  .col .hd{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+  .col .hd .badge{font-size:11px;font-family:var(--mono);letter-spacing:.1em;padding:4px 9px;border-radius:6px}
+  .col.now .badge{background:#E9EDF3;color:#5C6672}
+  .col.new .badge{background:var(--brand);color:#fff}
+  .col .hd .t{font-size:14px;font-weight:700}
+  .col .hd .s{font-size:12px;color:var(--ink-3);margin-left:auto}
+
+  .phone{background:#fff;border:1px solid var(--line);border-radius:20px;overflow:hidden;
+    box-shadow:0 20px 40px -30px rgba(22,48,92,.5)}
+  .bar{background:linear-gradient(180deg,#1E4A8A,#16305C);padding:9px 14px;display:flex;
+    justify-content:space-between;align-items:center;color:#fff;font-family:var(--mono);font-size:11px}
+  .wdhd{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line)}
+  .wdhd .logo{width:22px;height:22px;border-radius:7px;background:var(--brand);position:relative;flex:0 0 auto}
+  .wdhd .logo::before,.wdhd .logo::after{content:"";position:absolute;top:7px;width:4px;height:4px;
+    border-radius:50%;background:#fff}
+  .wdhd .logo::before{left:5px} .wdhd .logo::after{right:5px}
+  .wdhd .nm{font-size:14px;font-weight:700}
+  .body{height:520px;overflow-y:auto;padding:14px;background:#fff;position:relative}
+  .body::-webkit-scrollbar{width:5px}
+  .body::-webkit-scrollbar-thumb{background:#D8DEE7;border-radius:3px}
+
+  .ask{background:#EAF2FE;color:#12325C;border-radius:12px 12px 3px 12px;padding:11px 13px;
+    font-size:14px;line-height:1.6;margin:0 0 14px 34px;text-align:left}
+  .think{display:flex;align-items:center;gap:7px;background:#F5F7FA;border-radius:9px;
+    padding:8px 11px;font-size:12.5px;color:var(--ink-2);margin-bottom:14px}
+  .think .dot{width:14px;height:14px;border-radius:50%;background:var(--ok);flex:0 0 auto;position:relative}
+  .think .dot::after{content:"";position:absolute;left:4px;top:3px;width:4px;height:7px;
+    border:solid #fff;border-width:0 2px 2px 0;transform:rotate(45deg)}
+
+  /* 现状：文字墙 */
+  .wall{font-size:13.5px;line-height:1.85;color:#2B3138}
+  .wall h4{font-size:15px;font-weight:800;margin:16px 0 7px}
+  .wall h5{font-size:14px;font-weight:700;margin:13px 0 5px}
+  .wall p{margin:0 0 8px}
+  .wall .li{margin:0 0 4px;padding-left:11px;position:relative;color:#3B434C}
+  .wall .li::before{content:"";position:absolute;left:0;top:9px;width:4px;height:4px;border-radius:50%;background:#B6BEC8}
+  .wall a{color:var(--brand);text-decoration:underline}
+  .fade{position:sticky;bottom:-14px;height:56px;margin:0 -14px -14px;
+    background:linear-gradient(180deg,rgba(255,255,255,0),#fff 70%)}
+  .more{text-align:center;font-size:12px;color:var(--ink-3);font-family:var(--mono);padding:10px 0 4px}
+
+  .followq{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+  .followq .cap{font-size:13px;font-weight:700;margin-bottom:8px}
+  .followq div.q{background:#F5F7FA;border-radius:9px;padding:10px 12px;font-size:13px;color:#3B434C;margin-bottom:7px}
+
+  /* 改版：收窄 + 卡片 */
+  .narrow{font-size:14px;line-height:1.7;color:#2B3138;margin:0 0 11px}
+  .narrow b{font-weight:700}
+  .opts{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:6px}
+  .opt{font-family:var(--sans);font-size:13px;padding:9px 14px;border-radius:20px;cursor:pointer;
+    background:#fff;border:1.5px solid var(--brand);color:var(--brand);font-weight:600}
+  .opt:hover{background:#EAF2FE}
+  .opt[aria-pressed="true"]{background:var(--brand);color:#fff}
+  .opt:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+  .pcard{border:1px solid var(--line);border-radius:13px;overflow:hidden;margin-bottom:10px;
+    animation:pop .34s cubic-bezier(.2,.8,.3,1) backwards}
+  @keyframes pop{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+  .pcard .ph{display:flex;align-items:baseline;gap:8px;padding:12px 13px 8px}
+  .pcard .ph .nm{font-size:16px;font-weight:800;letter-spacing:-.01em}
+  .pcard .ph .tp{font-size:11px;font-family:var(--mono);color:var(--brand);background:#EAF2FE;
+    padding:2px 7px;border-radius:5px;margin-left:auto;flex:0 0 auto}
+  .pcard .rs{font-size:13px;color:var(--ink-2);padding:0 13px 10px;line-height:1.6;margin:0}
+  .pcard .facts{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--line);
+    background:#FAFBFD}
+  .pcard .facts div{padding:9px 6px;text-align:center;border-right:1px solid var(--line)}
+  .pcard .facts div:last-child{border-right:0}
+  .pcard .facts .k{font-size:10.5px;color:var(--ink-3);margin-bottom:3px}
+  .pcard .facts .v{font-size:12.5px;font-weight:700;color:var(--ink)}
+  .pcard .facts .v.warn{color:var(--warn)}
+  .pcard .buy{display:flex;justify-content:space-between;align-items:center;padding:10px 13px;
+    border-top:1px solid var(--line)}
+  .pcard .buy .p{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--price)}
+  .pcard .buy .p.free{color:var(--ok);font-size:14px}
+  .pcard .buy .p small{font-size:11px;color:var(--ink-3);font-weight:400;font-family:var(--sans)}
+  .pcard .buy button{background:var(--brand);color:#fff;border:0;border-radius:8px;padding:8px 16px;
+    font-family:var(--sans);font-size:13px;font-weight:700;cursor:pointer}
+  .pcard .buy button:hover{background:var(--brand-d)}
+
+  .swap{width:100%;background:#fff;border:1px solid var(--line);color:var(--ink-2);border-radius:10px;
+    padding:11px;font-family:var(--sans);font-size:13.5px;cursor:pointer;margin-top:2px}
+  .swap:hover{background:#F5F7FA}
+
+  .empty{padding:52px 16px;text-align:center}
+  .empty .t{font-size:22px;font-weight:800;color:#B9C1CB;margin-bottom:10px}
+  .empty .s{font-size:13px;color:var(--ink-3);line-height:1.7}
+  .empty .fake{margin-top:22px;border:1px dashed #CFD6DF;border-radius:12px;padding:16px}
+  .empty .fake .b{display:inline-block;background:var(--brand);color:#fff;font-size:13px;
+    padding:8px 20px;border-radius:18px;font-weight:600}
+
+  .tally{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin-top:20px}
+  .tally .box{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+  .tally .row{display:flex;justify-content:space-between;align-items:baseline;padding:8px 0;
+    border-bottom:1px solid #F0F3F7;font-size:13px;color:var(--ink-2)}
+  .tally .row:last-child{border-bottom:0}
+  .tally .row b{font-family:var(--mono);font-size:15px;color:var(--ink)}
+  .tally .row b.good{color:var(--ok)} .tally .row b.bad{color:var(--warn)}
+
+  .foot{margin-top:34px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:22px 24px}
+  .foot h3{font-size:17px;font-weight:800;margin:0 0 6px}
+  .foot .sub{font-size:13.5px;color:var(--ink-2);margin:0 0 16px;line-height:1.7}
+  .foot ol{margin:0;padding-left:20px}
+  .foot li{font-size:14px;line-height:1.8;margin-bottom:9px;color:#2B3138}
+  .foot li b{font-weight:700}
+  .foot .kept{margin-top:16px;padding-top:14px;border-top:1px solid var(--line);
+    font-size:13.5px;color:var(--ink-2);line-height:1.8}
+  .foot .kept b{color:var(--ink)}
+
+  @media (max-width:900px){
+    .pair,.tally{grid-template-columns:1fr}
+    .body{height:440px}
+    h1{font-size:26px}
+  }
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <p class="kicker">携程问道 · 输出形态改版对照</p>
+  <h1>不改推荐内容，只改输出形态。</h1>
+  <p class="claim">
+    左边是问道对同一个问题的<b>真实回答</b>（2026-09-02 实测，一字未改）。右边是改版建议——
+    <b>推荐的地方一个都没换</b>，换的只有：收窄提前、文字变卡片、卡片挂上商品。
+  </p>
+  <p class="note">
+    问道的内容层是过关的：扶梯 10:20 后改上行、大馆免费入场、九记周日休息、老店只收现金——这些是可靠答案库的价值，不该动。<br>
+    问题只在最后一步：它把这些事实当成<b>资料</b>写出来，而没有当成<b>约束</b>用来做减法。
+  </p>
+
+  <div class="tabs" id="tabs">
+    <button data-s="a" aria-current="true">场景 A · 我在中环，下午有三个小时</button>
+    <button data-s="b" aria-current="false">场景 B · 这周末想出去，还没想好去哪</button>
+  </div>
+
+  <div class="pair">
+    <div class="col now">
+      <div class="hd"><span class="badge">现状</span><span class="t" id="nowT">问道真实回答</span><span class="s" id="nowS">实测截图内容</span></div>
+      <div class="phone">
+        <div class="bar"><span>22:07</span><span>携程旅行</span></div>
+        <div class="wdhd"><span class="logo"></span><span class="nm">携程问道</span></div>
+        <div class="body" id="nowBody"></div>
+      </div>
+    </div>
+
+    <div class="col new">
+      <div class="hd"><span class="badge">改版</span><span class="t">同样的推荐，不同的形态</span><span class="s">可点</span></div>
+      <div class="phone">
+        <div class="bar"><span>15:20 周六</span><span>携程旅行</span></div>
+        <div class="wdhd"><span class="logo"></span><span class="nm">携程问道</span></div>
+        <div class="body" id="newBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="tally">
+    <div class="box" id="tallyNow"></div>
+    <div class="box" id="tallyNew"></div>
+  </div>
+
+  <div class="foot">
+    <h3>改了四件事</h3>
+    <p class="sub">全部在展现层，不涉及新供给、不涉及新模型。</p>
+    <ol>
+      <li><b>收窄提前。</b>问道现在把「一个人还是结伴 / 室内还是室外 / 想不想买门票」放在一千多字之后，并且自己说了「我可以帮你进一步缩小到最合适的那一个」。把这一步挪到第一句，只问一个问题、三个选项。</li>
+      <li><b>输出从文章变成卡片。</b>每张卡三行：怎么去 / 现在还开着吗 / 花多少钱。三张，不是十个地点两条路线。</li>
+      <li><b>事实当约束用。</b>问道知道泰昌 19:30 关、九记周日休息，但只是写出来。改版把它们变成筛选条件，此刻去不了的直接不出现。</li>
+      <li><b>接上商品层。</b>实测里正文推荐南头古城、欢乐港湾、华侨城，下方卡片却是深圳音乐厅、宝安公园——AI 说的和平台卖的是两批东西。改版把这个 join 补上：有票挂票，免费的写「免费·不用订」。</li>
+    </ol>
+    <p class="kept">
+      <b>刻意没动的：</b>推荐结果（场景 A 的六个地点、四家餐厅全部来自问道原答案）、事实数据、可靠答案库、榜单体系、语音入口。
+      这个提案的立场是——<b>内容你们做得比我好，我只改用户拿到它的方式。</b>
+    </p>
+  </div>
+</div>
+
+<script>
+(function(){
+  const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+
+  /* ============ 场景 A：现状（真实回答，节选自实测） ============ */
+  const NOW_A = `
+    <div class="ask">我现在在香港中环，下午有三个小时，去哪好</div>
+    <div class="think"><span class="dot"></span>深度思考已完成</div>
+    <div class="wall">
+      <p>3小时在中环，最推荐走一条"半山扶梯→大馆→中环街市→摩天轮"的经典Citywalk线，全程步行串联，不走回头路，吃喝拍照全都能兼顾。以下按推荐优先级给你两条风格不同的路线，按你当下心情挑一条即可。</p>
+      <h4>路线一：中环Citywalk人文线（3小时刚好，最推荐）</h4>
+      <p>这条线以步行+半山扶梯串联，从中环地铁站出发，一路往上再折返回海边，节奏松紧适中。</p>
+      <h5>第一站：<a href="#" onclick="return false">中环至半山自动扶手电梯</a>（约30分钟）</h5>
+      <p>全球最长的户外有盖扶梯系统，王家卫《重庆森林》同款取景地。扶梯从中环街市起点一路向上穿行SOHO区，沿途经过各种特色小店、咖啡馆和涂鸦墙，随时可以中途跳下来逛。</p>
+      <div class="li">位置：中环租庇利街（港铁中环站D1口步行约3分钟）</div>
+      <div class="li">注意：扶梯10:20后改为上行方向，下午去正好是上行</div>
+      <h5>第二站：<a href="#" onclick="return false">大馆</a>（约1-1.5小时）</h5>
+      <p>扶梯中途下来就是大馆，前身为中区警署和监狱，活化后成为艺术展览和文化空间。红砖建筑群、旧囚室操场都很出片，内部有咖啡馆可以歇脚。</p>
+      <div class="li">位置：中环荷李活道10号</div>
+      <div class="li">门票：免费入场，部分特展可能收费</div>
+      <div class="li">建议：囚室区和操场的旋转楼梯是经典拍照机位</div>
+      <h5>第三站：嘉咸街涂鸦墙 + 石板街（约30分钟）</h5>
+      <p>从大馆步行下来，顺路经过嘉咸街彩色壁画墙，港风街拍必打卡点。再往下走就是石板街（都爹利街/钵甸乍街），百年石板阶梯，多部港片取景地。</p>
+      <h5>第四站：中环街市（约30分钟）</h5>
+      <p>回到中环核心区，百年菜市场改建的文创空间，二楼有本地设计师小店和特色小吃。</p>
+      <h4>路线二：中环摩天轮 + 海滨线（更轻松，适合想吹海风）</h4>
+      <p>如果不想爬坡走路，直接从中环码头方向走，全程平地。</p>
+      <h5>中环摩天轮</h5>
+      <p>码头出来步行5分钟即到，20港币转3圈约15分钟，高空俯瞰维港全景，傍晚时分光线最好。</p>
+      <h5>天星小轮</h5>
+      <p>从摩天轮旁的中环码头坐天星小轮到尖沙咀，船程约10分钟，几块钱就能横渡维港看两岸天际线，性价比极高。</p>
+      <h4>3小时逛吃速选</h4>
+      <p>如果肚子饿了，以下几家都在中环步行可达范围内，按你的预算和排队意愿挑：</p>
+      <h5>一乐烧鹅（中环）</h5>
+      <div class="li">营业时间：每日 10:00-20:30　人均：约184元</div>
+      <h5>沾仔记（威灵顿街）</h5>
+      <div class="li">营业时间：每日 11:00-21:30　人均：约64元</div>
+      <h5>泰昌饼家</h5>
+      <div class="li">营业时间：每日 09:30-19:30　人均：约23元</div>
+      <h5>九记牛腩</h5>
+      <div class="li">营业时间：周一至周六 12:30-22:30（周日休息）　人均：约82元</div>
+      <h4>行前小贴士</h4>
+      <div class="li">中环多斜坡石阶，穿舒适运动鞋很重要</div>
+      <div class="li">部分老店只收现金，建议随身备300-500港币零钱</div>
+      <div class="li">扶梯靠右站立，左侧留给赶路的人通行</div>
+      <p style="margin-top:12px">如果你告诉我更偏好吃喝还是拍照打卡，或者愿意走多远，我可以帮你进一步精简路线。</p>
+    </div>
+    <div class="more">— 全文约 1,400 字，以上为完整内容 —</div>
+    <div class="followq">
+      <div class="cap">猜你还想问</div>
+      <div class="q">中环还有哪些适合下午去的景点？</div>
+      <div class="q">大馆附近有什么好吃的餐厅？</div>
+      <div class="q">中环街市的开放时间是几点到几点？</div>
+    </div>
+    <div class="fade"></div>`;
+
+  /* ============ 场景 B：现状（行程 tab 空状态，实测） ============ */
+  const NOW_B = `
+    <div class="ask">这周末想出去，还没想好去哪</div>
+    <div class="think"><span class="dot"></span>深度思考已完成</div>
+    <div class="wall">
+      <p style="color:#8A9099;font-size:12.5px;background:#F5F7FA;padding:10px 12px;border-radius:8px">
+        实测结果：回答与场景 A 同型——按 IP 默认当前城市，返回一大段分栏文字推荐本地免费景点，
+        末尾附三条追问。<b>无打包方案、无价格汇总、无下单入口。</b>下方为同一账号「行程」tab 的真实状态。
+      </p>
+      <div class="empty">
+        <div class="t">暂无行程</div>
+        <div class="s">而「我的线路」里躺着一条<br>「深圳福田站乘高铁直达香港西九龙」<br>2天 · 7个地点 · 自动保存</div>
+        <div class="fake">
+          <div style="font-size:12px;color:#9AA3AE;margin-bottom:12px">线路规划 · 支持智能推荐线路</div>
+          <span class="b">开始规划</span>
+          <div style="font-size:12px;color:#9AA3AE;margin-top:12px">要求用户先回答最难的那个问题：去哪</div>
+        </div>
+      </div>
+    </div>`;
+
+  /* ============ 场景 A：改版数据（全部取自问道原答案） ============ */
+  const A_SETS = {
+    walk:[
+      {nm:'大馆',tp:'景点',rs:'前中区警署，红砖建筑群和旧囚室操场，一个半小时刚好。',
+       go:'步行 9 分钟',open:'今日开放 至 20:00',close:'免费入场',price:'免费',free:true,btn:'导航'},
+      {nm:'中环至半山扶梯',tp:'路线',rs:'《重庆森林》取景地，此刻是上行方向，随时可以跳下来逛。',
+       go:'步行 3 分钟',open:'此刻上行',close:'全天',price:'免费',free:true,btn:'导航'},
+      {nm:'中环街市',tp:'景点',rs:'百年菜市场改的文创空间，二楼有小店，收尾顺手买手信。',
+       go:'步行 6 分钟',open:'20:00 关',close:'免费',price:'免费',free:true,btn:'导航'}
+    ],
+    sit:[
+      {nm:'中环摩天轮',tp:'门票',rs:'转 3 圈约 15 分钟，俯瞰维港。傍晚光线最好，现在去正合适。',
+       go:'步行 5 分钟',open:'22:00 关',close:'无需排队',price:'HK$20',free:false,btn:'订票'},
+      {nm:'天星小轮',tp:'船票',rs:'10 分钟横渡维港到尖沙咀，几块钱看两岸天际线。',
+       go:'步行 5 分钟',open:'班次 8 分钟一趟',close:'23:30 尾班',price:'HK$5',free:false,btn:'订票'},
+      {nm:'大馆咖啡馆',tp:'休息',rs:'不想走路的话，大馆院子里就能坐一下午，不用买门票。',
+       go:'步行 9 分钟',open:'19:00 关',close:'免费入场',price:'免费',free:true,btn:'导航'}
+    ],
+    eat:[
+      {nm:'沾仔记',tp:'餐厅',rs:'老牌云吞面，只卖三样浇头，云吞个头大。此刻不用等位。',
+       go:'步行 4 分钟',open:'21:30 关',close:'人均 ¥64',price:'¥64',free:false,btn:'看菜单'},
+      {nm:'九记牛腩',tp:'餐厅',rs:'清汤牛腩汤头鲜甜。今天周六营业，饭点前去不用排长队。',
+       go:'步行 7 分钟',open:'22:30 关',close:'人均 ¥82',price:'¥82',free:false,btn:'看菜单'},
+      {nm:'泰昌饼家',tp:'小食',rs:'1954 年的蛋挞，牛油皮外酥内滑。19:30 关门，现在还来得及。',
+       go:'步行 5 分钟',open:'19:30 关 · 还剩 4h',close:'人均 ¥23',price:'¥23',free:false,btn:'导航'}
+    ]
+  };
+  const A_LABEL={walk:'想走走',sit:'想坐着',eat:'想吃点东西'};
+
+  /* ============ 场景 B：改版数据（周末包） ============ */
+  const B_SETS = {
+    night:[
+      {nm:'香港 · 只在港岛，不赶路',tp:'2天1晚',rs:'高铁 78 分钟到西九龙，住上环。唯一要去的地方是大馆，免费，不用预约。',
+       go:'高铁往返 78 分钟',open:'上环酒店 1 晚',close:'锚点：大馆',price:'¥1,080',free:false,btn:'一键成行'},
+      {nm:'香港 · 冲一次 M+ 和西九',tp:'2天1晚',rs:'下了高铁走过去就是。M+ 需要提前预约，我们帮你占了周六下午的场。',
+       go:'高铁直达西九龙',open:'尖沙咀酒店 1 晚',close:'锚点：M+ 已预约',price:'¥1,320',free:false,btn:'一键成行'},
+      {nm:'香港 · 去离岛，什么都不干',tp:'2天1晚',rs:'高铁转渡轮到长洲，住海边民宿。没有锚点，这一档就是让你没事干。',
+       go:'高铁 + 渡轮 2 小时',open:'长洲民宿 1 晚',close:'锚点：无',price:'¥860',free:false,btn:'一键成行'}
+    ],
+    day:[
+      {nm:'香港 · 当天来回，只吃一顿',tp:'当天往返',rs:'早班高铁去，中环吃完逛完，末班车回。不用带行李。',
+       go:'高铁往返 78 分钟',open:'不用住',close:'锚点：沾仔记',price:'¥430',free:false,btn:'一键成行'},
+      {nm:'珠海 · 情侣路骑一圈',tp:'当天往返',rs:'城际直达，海边一条路骑到底。最省事的一档。',
+       go:'城际往返 1 小时',open:'不用住',close:'锚点：无',price:'¥260',free:false,btn:'一键成行'},
+      {nm:'惠州 · 双月湾看海',tp:'当天往返',rs:'车程稍长，但下午三点前到就来得及看日落。',
+       go:'大巴往返 2.5 小时',open:'不用住',close:'锚点：日落 18:42',price:'¥310',free:false,btn:'一键成行'}
+    ]
+  };
+  const B_LABEL={night:'过一夜',day:'当天来回'};
+
+  /* ============ 渲染 ============ */
+  function cardHTML(c,i){
+    return `<div class="pcard" style="animation-delay:${i*70}ms">
+      <div class="ph"><span class="nm">${c.nm}</span><span class="tp">${c.tp}</span></div>
+      <p class="rs">${c.rs}</p>
+      <div class="facts">
+        <div><div class="k">怎么去</div><div class="v">${c.go}</div></div>
+        <div><div class="k">现在</div><div class="v">${c.open}</div></div>
+        <div><div class="k">${c.free?'门票':'花多少'}</div><div class="v">${c.close}</div></div>
+      </div>
+      <div class="buy">
+        <span class="p ${c.free?'free':''}">${c.price}${c.free?' <small>· 不用订</small>':''}</span>
+        <button>${c.btn}</button>
+      </div>
+    </div>`;
+  }
+
+  let scene='a', batch=0;
+
+  function renderNew(){
+    const isA = scene==='a';
+    const SETS = isA?A_SETS:B_SETS, LAB = isA?A_LABEL:B_LABEL;
+    const keys = Object.keys(SETS);
+    const ask = isA?'我现在在香港中环，下午有三个小时，去哪好':'这周末想出去，还没想好去哪';
+    const q   = isA?'三小时，够走三个地方。你现在<b>想走走，还是想坐着？</b>'
+                   :'从深圳出发。你想<b>出城过一夜，还是当天来回？</b>';
+    let html = `<div class="ask">${ask}</div><div class="narrow">${q}</div>
+      <div class="opts" id="opts">${keys.map((k,i)=>
+        `<button class="opt" data-k="${k}" aria-pressed="${i===0}">${LAB[k]}</button>`).join('')}</div>
+      <div id="cards"></div>`;
+    $('#newBody').innerHTML = html;
+    $$('#opts .opt').forEach(b=>b.onclick=()=>{
+      $$('#opts .opt').forEach(x=>x.setAttribute('aria-pressed','false'));
+      b.setAttribute('aria-pressed','true'); batch=0; drawCards(SETS[b.dataset.k]);
+    });
+    drawCards(SETS[keys[0]]);
+  }
+  function drawCards(list){
+    const rot = list.slice(batch % list.length).concat(list.slice(0, batch % list.length));
+    $('#cards').innerHTML = rot.map(cardHTML).join('') +
+      `<button class="swap" id="swap">都不想去？换一批</button>`;
+    $('#swap').onclick=()=>{batch++; drawCards(list);};
+  }
+
+  const TALLY = {
+    a:{
+      now:[['回答长度','约 1,400 字','bad'],['给出的地点','10 个 · 2 条路线','bad'],
+           ['可直接下单的','0 个','bad'],['收窄问题出现在','第 1,380 字之后','bad'],
+           ['自报时长合计','180 分钟（已占满 3 小时）','bad']],
+      new:[['回答长度','1 个问题 + 3 张卡','good'],['给出的地点','3 个','good'],
+           ['可直接下单的','按选项 1–2 个','good'],['收窄问题出现在','第 1 句','good'],
+           ['到下单的点击数','2 次','good']]
+    },
+    b:{
+      now:[['入口要求','先给出目的地','bad'],['打包方案','无','bad'],
+           ['价格汇总','无','bad'],['可直接下单的','0 个','bad'],
+           ['「暂无行程」与已存线路','数据不互通','bad']],
+      new:[['入口要求','不需要目的地','good'],['打包方案','交通+住宿+锚点','good'],
+           ['价格汇总','全包价','good'],['可直接下单的','3 个','good'],
+           ['到下单的点击数','2 次','good']]
+    }
+  };
+  function renderTally(){
+    const t = TALLY[scene];
+    const row = r=>`<div class="row"><span>${r[0]}</span><b class="${r[2]}">${r[1]}</b></div>`;
+    $('#tallyNow').innerHTML = `<div class="row" style="border:0;padding-top:0">
+      <span style="font-weight:700;color:#1A1D21">现状</span></div>` + t.now.map(row).join('');
+    $('#tallyNew').innerHTML = `<div class="row" style="border:0;padding-top:0">
+      <span style="font-weight:700;color:#1A1D21">改版</span></div>` + t.new.map(row).join('');
+  }
+
+  function show(s){
+    scene=s; batch=0;
+    $$('#tabs button').forEach(b=>b.setAttribute('aria-current',String(b.dataset.s===s)));
+    $('#nowBody').innerHTML = s==='a'?NOW_A:NOW_B;
+    $('#nowT').textContent = s==='a'?'问道真实回答':'问道 + 行程 tab 实测';
+    $('#nowS').textContent = s==='a'?'一字未改':'实测状态';
+    $('#nowBody').scrollTop=0;
+    renderNew(); renderTally();
+  }
+  $$('#tabs button').forEach(b=>b.onclick=()=>show(b.dataset.s));
+  show('a');
+})();
+</script>
