@@ -3,3 +3,15 @@
 node_modules/
 .DS_Store
 app screen shots/
+
+# Local prototypes and archived explorations
+archive/
+constraint-demo.html
+hk-data.js
+wendao-compare-hk.html
+
+# Research and intermediate product documents
+demo-prd.md
+ota-ai-research-findings.md
+iteration-proposal.md
+revisit-product-proposal.md
