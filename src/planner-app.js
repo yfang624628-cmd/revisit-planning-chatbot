@@ -122,7 +122,8 @@ function planView(){
 function render(){
   const intro=!state.sessionId;
   const showChat=intro||state.phase!=='confirming';
-  const feedback=busy&&!localAction?'正在回复，请稍候；原方案会保留。':error;
+  const loading=state.plan?'正在处理，请稍候；当前行程不会被覆盖。':state.phase==='exploring'?'正在理解你的选择和反馈，请稍候。':'正在理解你的需求，请稍候。';
+  const feedback=busy&&!localAction?loading:error;
   const heading=intro?'这次，想换个玩法吗？':state.plan?'想改哪里，或者有什么想问的？':state.phase==='exploring'?'这几个方向哪里对，哪里不对？':'补充一下，就能开始安排';
   const placeholder=state.plan?'例如：第二天太赶了；这个安排适合带爸妈吗？':state.phase==='exploring'?'例如：第二个不错，但不想逛展；或者：选第二个':'说说去哪、玩多久、几个人、当地预算，以及哪些不想重复…';
   const chat=showChat?`<div class="${intro?'welcome':'conversation'}"><h2 id="chat-heading">${heading}</h2>${intro?'<div class="chips examples">'+examples.map(example=>button(example.label,'example','data-message="'+escape(example.message)+'"')).join('')+'</div>':''}${historyView()}<div id="feedback" role="status" aria-live="polite" ${!feedback?'hidden':''}>${escape(feedback)}</div><form id="chat" aria-labelledby="chat-heading"><textarea aria-labelledby="chat-heading" name="message" rows="2" maxlength="1800" required placeholder="${placeholder}">${escape(draft)}</textarea><button class="primary">发送</button></form></div>`:'';
