@@ -20,6 +20,20 @@ test('兼容模型把再访布尔值返回成常见文字',async()=>{
   assert.equal(result.revisit.wantsIdeas,true);
   assert.equal(result.phase,'confirming');
 });
+test('首页固定话术由代码识别再访状态，忽略模型漂移字段',async()=>{
+  const result=await plannerAPI({message:'两个人再去马德里3天，当地总预算5000元人民币。上次主要逛美术馆，这次想围绕街区和吃饭安排，晚出门也可以。'},{callModel:async()=>({slots:{...slots,destination:'马德里',days:3,budget:5000},revisit:{visitedBefore:'第二次去',wantsIdeas:'看情况',interests:'街区和吃饭',unexpected:'忽略'}})});
+  assert.equal(result.revisit.visitedBefore,true);
+  assert.deepEqual(result.revisit.interests,['街区和吃饭']);
+  assert.equal(result.revisit.wantsIdeas,null);
+  assert.equal(result.phase,'confirming');
+});
+test('模型返回异常槽位时忽略异常值并追问，不暴露格式错误',async()=>{
+  const result=await plannerAPI({message:'上次去过马德里，这次想看看街区'},{callModel:async()=>({slots:{destination:'马德里',days:'三天',people:{value:2},budget:null,unknown:'x'},revisit:{visitedBefore:{value:true},wantsIdeas:'不确定',interests:'街区'}})});
+  assert.equal(result.revisit.visitedBefore,true);
+  assert.deepEqual(result.revisit.interests,['街区']);
+  assert.match(result.answer,/天数、人数、人民币预算/);
+  assert.doesNotMatch(result.answer,/格式/);
+});
 test('没想法的再访用户先选玩法，再保留锚点生成行程',async()=>{
   const first=await plannerAPI({message:'香港去过两次，不知道这次干什么'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true,avoid:['太平山'],interests:['街区']}})});
   assert.equal(first.phase,'confirming');

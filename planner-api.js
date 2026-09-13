@@ -27,17 +27,39 @@ export function validateSlots(patch){
   }
 }
 function shortText(value,max=160){return typeof value==='string'&&value.trim().length>0&&value.length<=max;}
+function normalizeExtractedSlots(patch={}){
+  if(!patch||typeof patch!=='object'||Array.isArray(patch))return {};
+  const next={};
+  for(const [key,raw] of Object.entries(patch)){
+    if(!Object.hasOwn(initialSlots(),key))continue;
+    let value=raw;
+    if(['days','hours','people','budget'].includes(key)&&typeof value==='string'&&/^\d+(?:\.\d+)?$/.test(value.trim()))value=Number(value);
+    if(key==='mode'&&['出发前','旅行'].includes(value))value='trip';
+    if(key==='mode'&&['途中','已在当地','现在'].includes(value))value='now';
+    if(key==='scope'&&['全员','总计','合计'].includes(value))value='total';
+    if(key==='scope'&&['每人','人均'].includes(value))value='person';
+    try{validateSlots({[key]:value});next[key]=value;}catch{}
+  }
+  return next;
+}
 function normalizeRevisit(patch={}){
-  if(!patch||typeof patch!=='object'||Array.isArray(patch))return patch;
-  const next={...patch};
+  if(!patch||typeof patch!=='object'||Array.isArray(patch))return {};
+  const next={};
+  for(const key of ['avoid','revisit','liked','interests']){
+    const value=patch[key];
+    if(Array.isArray(value))next[key]=value.filter(item=>shortText(item,80)).slice(0,20);
+    else if(shortText(value,80))next[key]=[value.trim()];
+  }
+  for(const key of ['pace','mobility','direction'])if(shortText(patch[key],160))next[key]=patch[key].trim();
   const values={
     visitedBefore:{true:['true','yes','是','去过','去过了'],false:['false','no','否','没去过','没有去过']},
     wantsIdeas:{true:['true','yes','是','需要','想要','没想法','先看看','先给方向'],false:['false','no','否','不需要','有想法','直接安排']}
   };
   for(const [key,words] of Object.entries(values)){
-    const value=next[key];
+    const value=patch[key];
     if(value===1)next[key]=true;
     else if(value===0)next[key]=false;
+    else if(value===true||value===false||value===null)next[key]=value;
     else if(typeof value==='string'){
       const normalized=value.trim().toLowerCase();
       if(words.true.includes(normalized))next[key]=true;
@@ -45,6 +67,14 @@ function normalizeRevisit(patch={}){
     }
   }
   return next;
+}
+function explicitRevisit(message=''){
+  const result={};
+  if(/(?:没去过|没有去过|从未去过|第一次去)/.test(message))result.visitedBefore=false;
+  else if(/(?:再去|再访|重游|去过|逛过|玩过|第[二三四五六七八九十\d]+次|上次)/.test(message))result.visitedBefore=true;
+  if(/(?:没想法|不知道.*(?:玩|去|做)|先给.*(?:方向|建议)|先看看)/.test(message))result.wantsIdeas=true;
+  else if(/(?:直接安排|直接规划|就按.+安排)/.test(message))result.wantsIdeas=false;
+  return result;
 }
 function validateRevisit(patch={}){
   if(!patch||typeof patch!=='object'||Array.isArray(patch))throw fail('再访需求格式有误');
@@ -231,8 +261,8 @@ export async function plannerAPI(input,{callModel=model}={}){
     }else if(action==='message'&&next.phase!=='planned'){
       if(!shortText(input.message,1800))throw fail('请写下出行需求');
       const result=await callModel([{role:'system',content:extractionPrompt},{role:'user',content:JSON.stringify({message:input.message,current:{slots:next.slots,revisit:next.revisit},proposals:next.proposals.map(item=>({id:item.id,title:item.title})),history:next.history.slice(-6)})}]);
-      validateSlots(result.slots||{});Object.assign(next.slots,result.slots||{});
-      next.revisit=mergeRevisit(next.revisit,result.revisit||{});
+      Object.assign(next.slots,normalizeExtractedSlots(result.slots||{}));
+      next.revisit=mergeRevisit(next.revisit,{...normalizeRevisit(result.revisit||{}),...explicitRevisit(input.message)});
       const remaining=input.message.match(/(?:还有|还剩|剩余)\s*(\d+(?:\.\d+)?)\s*(?:个)?小时/);
       if(remaining && /现在|已经|目前/.test(input.message)){
         next.slots.mode='now';next.slots.hours=Number(remaining[1]);
