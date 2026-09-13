@@ -50,12 +50,13 @@ test('按卡片顺序定位地点并返回真实道路折线',async()=>{
   const requested=[];
   const route=await routeForDay(routeDay,'测试国',{
     geocodePlace:async name=>name==='未找到'?null:{name,lat:name==='甲'?31:31.01,lon:name==='甲'?121:121.01,displayName:name+'，测试城'},
-    routeRequest:async url=>{requested.push(url);return {code:'Ok',routes:[{distance:1800,duration:1440,geometry:{coordinates:[[121,31],[121.01,31.01]]}}]};}
+    routeRequest:async url=>{requested.push(url);return {code:'Ok',routes:[{distance:1800,duration:1440,geometry:{coordinates:[[121,31],[121.01,31.01]]},legs:[{steps:[{geometry:{coordinates:[[121,31],[121.01,31.01]]}}]}]}]};}
   });
   assert.equal(route.distance,1800);assert.equal(route.points.length,2);
   assert.deepEqual(route.points.map(point=>point.stopNumber),[1,2]);
   assert.deepEqual(route.unresolved,['未找到']);
   assert.equal(route.totalStops,3);
+  assert.equal(route.segments.length,1);
   assert.match(requested[0],/route\/v1\/foot\/121,31;121.01,31.01/);
 });
 test('地图匹配不完整时保留可用地点，不伪造完整路线',async()=>{

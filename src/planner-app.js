@@ -45,7 +45,8 @@ function worldPoint(lon,lat,zoom){
 }
 function routeMap(route){
   const width=640,height=300,padding=42;
-  const coordinates=route.geometry.length?route.geometry:route.points.map(point=>[point.lon,point.lat]);
+  const routeSegments=route.segments?.length?route.segments:route.geometry.length?[route.geometry]:[];
+  const coordinates=routeSegments.length?routeSegments.flat():route.points.map(point=>[point.lon,point.lat]);
   if(!coordinates.length)return '';
   let zoom=1;
   let initialPixels=coordinates.map(([lon,lat])=>worldPoint(lon,lat,zoom));
@@ -67,9 +68,15 @@ function routeMap(route){
       tiles.push(`<image href="https://tile.openstreetmap.org/${zoom}/${wrapped}/${tileY}.png" x="${Math.round(tileX*tileSize-left)}" y="${Math.round(tileY*tileSize-top)}" width="256" height="256"></image>`);
     }
   }
-  const line=route.geometry.map(([lon,lat])=>{const point=worldPoint(lon,lat,zoom);return `${(point.x-left).toFixed(1)},${(point.y-top).toFixed(1)}`;}).join(' ');
+  const lines=routeSegments.map(segment=>`<polyline points="${segment.map(([lon,lat])=>{const point=worldPoint(lon,lat,zoom);return `${(point.x-left).toFixed(1)},${(point.y-top).toFixed(1)}`;}).join(' ')}"></polyline>`).join('');
+  const arrows=routeSegments.map(segment=>{
+    const index=Math.max(0,Math.min(segment.length-2,Math.floor(segment.length*.55)));
+    const from=worldPoint(segment[index][0],segment[index][1],zoom),to=worldPoint(segment[index+1][0],segment[index+1][1],zoom);
+    const angle=Math.atan2(to.y-from.y,to.x-from.x)*180/Math.PI;
+    return `<path class="route-arrow" d="M -8 -6 L 8 0 L -8 6 Z" transform="translate(${(from.x-left).toFixed(1)} ${(from.y-top).toFixed(1)}) rotate(${angle.toFixed(1)})"></path>`;
+  }).join('');
   const markers=route.points.map(point=>{const pixel=worldPoint(point.lon,point.lat,zoom);return `<g transform="translate(${(pixel.x-left).toFixed(1)} ${(pixel.y-top).toFixed(1)})"><circle r="13"></circle><text y="5">${point.stopNumber}</text></g>`;}).join('');
-  return `<div class="route-map" role="img" aria-label="当天已匹配地点${route.geometry.length?'的步行连接路线':'的位置'}"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${tiles.join('')}${line?`<polyline points="${line}"></polyline>`:''}${markers}</svg><span class="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span></div>`;
+  return `<div class="route-map" role="img" aria-label="当天已匹配地点${route.geometry.length?'的步行连接路线':'的位置'}"><svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet">${tiles.join('')}${lines}${arrows}${markers}</svg><span class="map-attribution">© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a></span></div>`;
 }
 function routePanel(index){
   if(routeLoading===index)return `<div class="route-panel" id="route-panel-${index}"><p>正在匹配当天地点…</p></div>`;
@@ -79,8 +86,7 @@ function routePanel(index){
   const coverage=`已匹配 ${route.points.length}/${route.totalStops} 站`;
   if(!route.points.length)return `<div class="route-panel route-error" id="route-panel-${index}"><p>这几个地点暂时没匹配到，行程仍可查看。</p><p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}</p>${button('重试','route',`data-day="${index}"`)}</div>`;
   const summary=route.distance!==null?`<div class="route-summary"><strong>${coverage}</strong><span>按步行路线连接约 ${(route.distance/1000).toFixed(1)} 公里 · ${Math.max(1,Math.round(route.duration/60))} 分钟${route.includesFerry?' · 含渡轮路段':''}</span></div>`:`<div class="route-summary"><strong>${coverage}</strong><span>${route.routeUnavailable?'暂未找到这些地点间的步行连接':'至少匹配两站后显示步行距离'}</span></div>`;
-  const matched=`<details class="matched-places"><summary>查看地图匹配结果</summary><ol class="located-list">${route.points.map(point=>`<li><b>${point.stopNumber}</b><span>${escape(point.name)}</span><small>${escape(point.displayName)}</small></li>`).join('')}</ol></details>`;
-  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}${matched}<p class="map-note">用于理解已匹配地点怎样连接，不是实时导航。</p></div>`;
+  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}<p class="map-note">用于理解已匹配地点怎样连接，不是实时导航。</p></div>`;
 }
 const button=(text,action,extra='')=>`<button type="button" data-action="${action}" ${extra}>${escape(text)}</button>`;
 function revisitSummary(){
