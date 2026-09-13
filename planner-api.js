@@ -27,6 +27,25 @@ export function validateSlots(patch){
   }
 }
 function shortText(value,max=160){return typeof value==='string'&&value.trim().length>0&&value.length<=max;}
+function normalizeRevisit(patch={}){
+  if(!patch||typeof patch!=='object'||Array.isArray(patch))return patch;
+  const next={...patch};
+  const values={
+    visitedBefore:{true:['true','yes','是','去过','去过了'],false:['false','no','否','没去过','没有去过']},
+    wantsIdeas:{true:['true','yes','是','需要','想要','没想法','先看看','先给方向'],false:['false','no','否','不需要','有想法','直接安排']}
+  };
+  for(const [key,words] of Object.entries(values)){
+    const value=next[key];
+    if(value===1)next[key]=true;
+    else if(value===0)next[key]=false;
+    else if(typeof value==='string'){
+      const normalized=value.trim().toLowerCase();
+      if(words.true.includes(normalized))next[key]=true;
+      else if(words.false.includes(normalized))next[key]=false;
+    }
+  }
+  return next;
+}
 function validateRevisit(patch={}){
   if(!patch||typeof patch!=='object'||Array.isArray(patch))throw fail('再访需求格式有误');
   const allowed=new Set(Object.keys(initialRevisit()));
@@ -34,10 +53,11 @@ function validateRevisit(patch={}){
     if(!allowed.has(key))throw fail('不支持的再访需求字段');
     if(['avoid','revisit','liked','interests'].includes(key)&&(!Array.isArray(value)||value.some(item=>!shortText(item,80))||value.length>20))throw fail('再访经历格式有误');
     if(['pace','mobility','direction'].includes(key)&&value!==''&&!shortText(value,160))throw fail('偏好文字过长');
-    if(['visitedBefore','wantsIdeas'].includes(key)&&value!==null&&typeof value!=='boolean')throw fail('再访状态格式有误');
+    if(['visitedBefore','wantsIdeas'].includes(key)&&value!==null&&typeof value!=='boolean')throw fail('模型没有正确理解你是否去过或是否需要玩法建议，请换种说法再试一次。',502);
   }
 }
 function mergeRevisit(current,patch={}){
+  patch=normalizeRevisit(patch);
   validateRevisit(patch);const next={...current};
   for(const [key,value] of Object.entries(patch))next[key]=Array.isArray(value)?[...new Set([...(next[key]||[]),...value])]:value;
   return next;

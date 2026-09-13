@@ -14,6 +14,12 @@ test('只接受当前六座城市，并继续追问再访经历',async()=>{
   const unknown=await plannerAPI({message:'两个人去香港玩两天，预算5000'},{callModel:async()=>({slots:{...slots,budget:5000}})});
   assert.match(unknown.answer,/以前去过香港吗/);
 });
+test('兼容模型把再访布尔值返回成常见文字',async()=>{
+  const result=await plannerAPI({message:'香港去过了，但这次没想法'},{callModel:async()=>({slots,revisit:{visitedBefore:'去过',wantsIdeas:'没想法'}})});
+  assert.equal(result.revisit.visitedBefore,true);
+  assert.equal(result.revisit.wantsIdeas,true);
+  assert.equal(result.phase,'confirming');
+});
 test('没想法的再访用户先选玩法，再保留锚点生成行程',async()=>{
   const first=await plannerAPI({message:'香港去过两次，不知道这次干什么'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true,avoid:['太平山'],interests:['街区']}})});
   assert.equal(first.phase,'confirming');
