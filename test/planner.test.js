@@ -45,7 +45,7 @@ test('没想法的再访用户先选玩法，再保留锚点生成行程',async(
   const explored=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>{throw new Error('确认条件时不应生成行程');}});
   assert.equal(explored.phase,'exploring');assert.equal(explored.proposals.length,3);assert.equal(explored.plan,null);
   const selected=explored.proposals[0];
-  const generated={title:'香港再访',days:[{...day(selected.title),stops:[{time:'10:00',name:selected.anchor,mapQuery:selected.mapQuery,note:'保留选中的玩法'}]},day('另一日')]};
+  const generated={title:'香港再访',days:[{...day(selected.title),stops:[{time:'10:00',name:selected.anchor,mapQuery:selected.mapQuery,note:'安排'+selected.supporting[0]}]},day('另一日')]};
   const finished=await plannerAPI({sessionId:first.sessionId,action:'proposal',proposalId:selected.id},{callModel:async()=>structuredClone(generated)});
   assert.equal(finished.phase,'planned');assert.equal(finished.selectedProposal.id,selected.id);
   assert.ok(finished.plan.days.some(item=>item.stops.some(stop=>stop.mapQuery===selected.mapQuery)));
@@ -61,6 +61,28 @@ test('方向卡由模型改写，但只能引用候选池锚点',async()=>{
   assert.equal(explored.proposals[0].id,'hk-peng-chau');
   assert.equal(explored.proposals[0].title,'今天离开市区');
   assert.ok(explored.proposals.every(item=>revisitCatalog.some(anchor=>anchor.id===item.id)));
+});
+test('探索阶段可以询问方向卡，不会选择或替换卡片',async()=>{
+  const first=await plannerAPI({message:'香港去过两次，先给我方向'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true}})});
+  const explored=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>{throw new Error('使用兜底方向');}});
+  const answered=await plannerAPI({sessionId:first.sessionId,message:'第二个适合带爸妈吗？'},{callModel:async()=>({intent:'question',answer:'第二个步行适中，可以减少一个停留点，并预留休息。',slots:{},revisit:{}})});
+  assert.equal(answered.answer,'第二个步行适中，可以减少一个停留点，并预留休息。');
+  assert.equal(answered.phase,'exploring');
+  assert.equal(answered.plan,null);
+  assert.deepEqual(answered.proposals,explored.proposals);
+});
+test('用户反悔时撤销旧排除项，并消除相反要求',async()=>{
+  const first=await plannerAPI({message:'香港去过两次，太平山不想再去'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true,avoid:['太平山']}})});
+  const corrected=await plannerAPI({sessionId:first.sessionId,message:'太平山还是想去'},{callModel:async()=>({intent:'feedback',slots:{},revisit:{revisit:['太平山']},revisitRemove:{avoid:['太平山']}})});
+  assert.deepEqual(corrected.revisit.avoid,[]);
+  assert.deepEqual(corrected.revisit.revisit,['太平山']);
+});
+test('选中方向的节奏与交通承诺必须进入最终行程',async()=>{
+  const first=await plannerAPI({message:'香港去过两次，想看看离岛'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true,interests:['离岛']}})});
+  const explored=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>({proposals:[{anchorId:'hk-peng-chau',title:'坪洲慢行',supporting:['坐船','慢走'],novelty:'换成离岛节奏',tradeoff:'需要看船班'}]})});
+  const selected=explored.proposals.find(item=>item.id==='hk-peng-chau');
+  const badPlan={title:'香港离岛',days:[{...day('坪洲'),stops:[{time:'10:00',name:selected.anchor,mapQuery:selected.mapQuery,note:'坐船去慢走'}],transport:'全程步行'},day('市区')]};
+  await assert.rejects(()=>plannerAPI({sessionId:first.sessionId,action:'proposal',proposalId:selected.id},{callModel:async()=>badPlan}),/乘船要求/);
 });
 test('按卡片顺序定位地点并返回真实道路折线',async()=>{
   const routeDay={city:'测试城',stops:[{name:'甲'},{name:'乙'},{name:'未找到'}]};
