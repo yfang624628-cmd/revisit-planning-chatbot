@@ -1,0 +1,31 @@
+{
+  "version": "2026-09-15.5",
+  "status": "published",
+  "roles": [
+    {"id":"maker","status":"published","name":"手艺人","care":"材料、工具与制作过程","method":"从手作痕迹理解一条街的生产方式","keywords":["手作","市场","旧街","工业"]},
+    {"id":"artist","status":"published","name":"艺术家","care":"形式、灵感与创作环境","method":"从作品、颜色和空间寻找创作线索","keywords":["艺术","设计","展览","工业"]},
+    {"id":"resident","status":"published","name":"当地居民","care":"日常节奏与生活便利","method":"沿吃饭、休息与通勤动线感受街区","keywords":["街区","吃饭","市场","轻松","生活方式"]},
+    {"id":"planner","status":"published","name":"城市规划师","care":"空间如何被连接和共同使用","method":"比较入口、尺度、人流与公共空间","keywords":["城市景观","工业","街区","建筑","公园"]},
+    {"id":"historian","status":"published","name":"城市史研究者","care":"旧痕迹如何进入今天","method":"把空间放回城市变化的时间线","keywords":["历史","工业","人文","旧街"]},
+    {"id":"architect","status":"published","name":"建筑师","care":"建筑与街道如何互相回应","method":"观察材料、尺度、入口与公共空间","keywords":["建筑","设计","工业"]},
+    {"id":"designer","status":"published","name":"设计师","care":"功能如何变得顺手且好看","method":"留意导视、展陈、家具和服务细节","keywords":["设计","艺术","室内","建筑"]},
+    {"id":"biologist","status":"published","name":"生物学家","care":"城市如何容纳动植物","method":"观察水体、植被、动物和设施的边界","keywords":["自然","公园","海边","户外","离岛"]},
+    {"id":"chef","status":"published","name":"厨师","care":"食材和口味如何塑造生活","method":"从市场、菜单和用餐时段寻找地方线索","keywords":["吃饭","市场","街区"]},
+    {"id":"writer","status":"published","name":"作家","care":"街区怎样成为故事","method":"从文字、声音和人物关系捕捉场景","keywords":["人文","历史","街区","旧街"]},
+    {"id":"restorer","status":"published","name":"修复师","care":"旧东西怎样继续被使用","method":"寻找保留构件、新旧接缝与再利用方式","keywords":["历史","建筑","工业","手作"]},
+    {"id":"curator","status":"published","name":"策展人","care":"空间怎样讲述一个故事","method":"比较内容、动线和环境如何共同叙事","keywords":["艺术","展览","设计","室内"]},
+    {"id":"community","status":"published","name":"社区工作者","care":"谁在共同使用并改变这里","method":"观察生活、商业与文化活动的交界","keywords":["街区","生活方式","市场","公园"]},
+    {"id":"musician","status":"published","name":"音乐人","care":"夜间空间的声音和节奏","method":"从灯光、人群与声音判断街区状态","keywords":["夜晚","工业","街区"]},
+    {"id":"fan","status":"published","name":"球迷","care":"共同记忆怎样围绕球队形成","method":"从人群、标识和周边消费理解主场文化","keywords":["体育","城市文化"]}
+  ],
+  "activities": [
+    {"id":"observe","status":"published","name":"现场观察","instruction":"指出两个在现场可以直接观察的具体细节"},
+    {"id":"compare","status":"published","name":"对照比较","instruction":"安排一次新旧、内外或两种人群使用方式的比较"},
+    {"id":"trace","status":"published","name":"沿线追踪","instruction":"沿一段短路线寻找同一主题的连续线索"},
+    {"id":"taste","status":"published","name":"用餐进入","instruction":"把一顿饭变成理解街区生活的入口"},
+    {"id":"record","status":"published","name":"留下记录","instruction":"用照片、文字或声音记录一个有判断的问题"}
+  ],
+  "rules": [
+    {"id":"generative-directions-v1","status":"published","maxCandidates":16,"maxCards":3,"actionsPerCard":2,"minRoleScore":2,"uniqueMaterial":true,"uniqueRole":true,"excludeShownMaterials":true}
+  ]
+}

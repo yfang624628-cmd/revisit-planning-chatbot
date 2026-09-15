@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plannerAPI } from './planner-api.js';
+import {contentPreview,reloadContent,rollbackContent,getContent} from './content-store.js';
 
 const PORT = process.env.PORT || 5173;
 const ROOT = fileURLToPath(new URL('.', import.meta.url));
@@ -32,6 +33,21 @@ createServer(async (req, res) => {
     }
   }
 
+  if (url.pathname === '/api/content') {
+    const respond = (status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
+    if (req.method === 'GET') {
+      try { return respond(200, await contentPreview({city:url.searchParams.get('city')||'',roleId:url.searchParams.get('roleId')||'',revisit:{interests:url.searchParams.getAll('interest'),avoid:url.searchParams.getAll('avoid')}})); }
+      catch (error) { return respond(422,{error:error.message,issues:error.issues}); }
+    }
+    if (req.method !== 'POST') return respond(405,{error:'请使用 GET 或 POST'});
+    let body=''; for await(const chunk of req){body+=chunk; if(Buffer.byteLength(body)>64000)return respond(413,{error:'请求过长'});}
+    let input={};try{input=JSON.parse(body||'{}');}catch{return respond(400,{error:'请求格式不正确'});}
+    if(input.action==='reload'){const result=await reloadContent();return respond(result.ok?200:422,{...result,version:result.config?.version});}
+    if(input.action==='rollback'){const result=rollbackContent();return respond(result.ok?200:409,{...result,version:result.config?.version});}
+    if(input.action==='status'){const config=await getContent();return respond(200,{version:config.version,status:config.status});}
+    return respond(400,{error:'未知内容操作'});
+  }
+
   if (url.pathname.startsWith('/api/')) {
     res.writeHead(404, { 'content-type':'application/json; charset=utf-8' });
     return res.end(JSON.stringify({ error:'接口不存在' }));
@@ -42,7 +58,7 @@ createServer(async (req, res) => {
   if (p.includes('..')) { res.writeHead(403); return res.end('no'); }
   try {
     const body = await readFile(join(ROOT, p));
-    res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream' });
+    res.writeHead(200, { 'content-type': MIME[extname(p)] || 'application/octet-stream', 'cache-control':'no-store' });
     res.end(body);
   } catch {
     res.writeHead(404, { 'content-type':'text/plain; charset=utf-8' });

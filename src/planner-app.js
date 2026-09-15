@@ -1,12 +1,12 @@
 import {examples} from './examples.js';
 
 const root=document.querySelector('#newBody');root.id='planner';
-const emptyState=()=>({sessionId:null,slots:null,revisit:null,phase:'collecting',proposals:[],selectedProposal:null,plan:null,lockedDays:[],confirmed:false,baseBudget:null,messages:[],answer:''});
+const emptyState=()=>({sessionId:null,slots:null,revisit:null,phase:'collecting',proposals:[],proposalStatus:null,selectedProposal:null,plan:null,lockedDays:[],confirmed:false,baseBudget:null,messages:[],answer:''});
 let state=emptyState();
 let busy=false,error='',draft='',budgetDraft=null,localAction=false;
 let cardNotice=null,noticeTimer=null;
 let routes={},routeLoading=null,routeErrors={};
-const storageKey='travel-revisit-session-v1';
+const storageKey='travel-revisit-session-v3';
 try{const saved=JSON.parse(sessionStorage.getItem(storageKey)||'null');if(saved?.sessionId)state={...emptyState(),...saved,messages:Array.isArray(saved.messages)?saved.messages.slice(-40):[]};}catch{}
 const escape=value=>String(value??'').replace(/[&<>"']/g,character=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[character]));
 const money=value=>'¥'+Number(value).toLocaleString('zh-CN');
@@ -84,29 +84,44 @@ function routePanel(index){
   const route=routes[index];
   if(!route)return '';
   const coverage=`已匹配 ${route.points.length}/${route.totalStops} 站`;
-  if(!route.points.length)return `<div class="route-panel route-error" id="route-panel-${index}"><p>这几个地点暂时没匹配到，行程仍可查看。</p><p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}</p>${button('重试','route',`data-day="${index}"`)}</div>`;
+  if(!route.points.length)return `<div class="route-panel route-error" id="route-panel-${index}"><p>${escape(route.serviceWarning||'这几个地点暂时没匹配到，行程仍可查看。')}</p><p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}</p>${button('重试','route',`data-day="${index}"`)}</div>`;
   const summary=route.distance!==null?`<div class="route-summary"><strong>${coverage}</strong><span>按步行路线连接约 ${(route.distance/1000).toFixed(1)} 公里 · ${Math.max(1,Math.round(route.duration/60))} 分钟${route.includesFerry?' · 含渡轮路段':''}</span></div>`:`<div class="route-summary"><strong>${coverage}</strong><span>${route.routeUnavailable?'暂未找到这些地点间的步行连接':'至少匹配两站后显示步行距离'}</span></div>`;
-  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}<p class="map-note">用于理解已匹配地点怎样连接，不是实时导航。</p></div>`;
+  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.serviceWarning?`<p class="route-warning">${escape(route.serviceWarning)}</p>${button('重试','route',`data-day="${index}"`)}`:''}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}<p class="map-note">用于理解已匹配地点怎样连接，不是实时导航。</p></div>`;
 }
 const button=(text,action,extra='')=>`<button type="button" data-action="${action}" ${extra}>${escape(text)}</button>`;
 function revisitSummary(){
   if(!state.revisit)return '';
-  const parts=[];
+  const parts=[],same=(left,right)=>{const a=left.trim().toLowerCase(),b=right.trim().toLowerCase();return a===b||(a.length>1&&b.length>1&&(a.includes(b)||b.includes(a)));};
+  const liked=state.revisit.liked||[],interests=state.revisit.interests||[];
+  const shared=liked.filter(item=>interests.some(interest=>same(item,interest)));
+  const likedOnly=liked.filter(item=>!shared.some(value=>same(item,value))),interestOnly=interests.filter(item=>!shared.some(value=>same(item,value)));
   if(state.revisit.avoid?.length)parts.push('不重复：'+state.revisit.avoid.join('、'));
   if(state.revisit.revisit?.length)parts.push('还想去：'+state.revisit.revisit.join('、'));
-  if(state.revisit.liked?.length)parts.push('上次喜欢：'+state.revisit.liked.join('、'));
-  if(state.revisit.interests?.length)parts.push('这次想试：'+state.revisit.interests.join('、'));
+  if(shared.length)parts.push('喜欢并想继续：'+shared.join('、'));
+  if(likedOnly.length)parts.push('上次喜欢：'+likedOnly.join('、'));
+  if(interestOnly.length)parts.push('这次想试：'+interestOnly.join('、'));
   if(state.revisit.pace)parts.push('节奏：'+state.revisit.pace);
   if(state.revisit.mobility)parts.push('体力：'+state.revisit.mobility);
   return parts.length?`<div class="revisit-summary"><strong>这次已知道</strong><p>${escape(parts.join(' · '))}</p></div>`:'';
 }
 function slotsView(){
-  const fields=[['destination',state.slots.mode==='now'?'你现在在哪':'目的地'],['people','人数'],['budget','当地行程预算（人民币）'],[state.slots.mode==='now'?'hours':'days',state.slots.mode==='now'?'还剩几小时':'玩几天'],...(state.slots.mode==='now'?[]:[['origin','出发地（可选）'],['date','日期（可选）']])];
-  return `<section><h2>核对一下，再看玩法</h2><p class="scope-note">预算用于住宿、餐饮、当地交通和游玩${state.slots.mode==='now'?'。':'，不含从出发地往返的机票或火车。'}</p>${revisitSummary()}<form id="confirm"><div class="fields">${fields.map(([key,label])=>`<label>${label}<input name="${key}" type="${['people','budget','days','hours'].includes(key)?'number':'text'}" value="${escape(state.slots[key])}" ${['origin','date'].includes(key)?'':'required'} ${key==='hours'?'min="0.5" step="0.5"':['people','budget','days'].includes(key)?'min="1" step="1"':''}></label>`).join('')}<label>预算口径<select name="scope"><option value="total" ${state.slots.scope==='total'?'selected':''}>所有人合计</option><option value="person" ${state.slots.scope==='person'?'selected':''}>每人</option></select></label></div><button class="primary">确认，看看这次怎么玩</button></form></section>`;
+  const avoid=(state.revisit?.avoid||[]).join('、');
+  const fields=[
+    ['destination','目的地城市',state.slots.destination],
+    ['people','人数',state.slots.people],
+    ['budget','当地行程预算（人民币）',state.slots.budget],
+    [state.slots.mode==='now'?'hours':'days',state.slots.mode==='now'?'还剩几小时':'玩几天',state.slots[state.slots.mode==='now'?'hours':'days']],
+    ['area',state.slots.mode==='now'?'你现在所在片区（可选）':'偏好片区（可选）',state.slots.area],
+    ['avoid','不去哪里（可选）',avoid],
+    ...(state.slots.mode==='now'?[]:[['origin','出发地（可选）',state.slots.origin],['date','日期（可选）',state.slots.date]])
+  ];
+  return `<section><h2>核对一下，再看玩法</h2><p class="scope-note">预算用于住宿、餐饮、当地交通和游玩${state.slots.mode==='now'?'。':'，不含从出发地往返的机票或火车。'}</p>${revisitSummary()}<form id="confirm"><div class="fields">${fields.map(([key,label,value])=>`<label>${label}<input name="${key}" type="${['people','budget','days','hours'].includes(key)?'number':'text'}" value="${escape(value)}" ${['area','avoid','origin','date'].includes(key)?'':'required'} ${key==='hours'?'min="0.5" step="0.5"':['people','budget','days'].includes(key)?'min="1" step="1"':''}></label>`).join('')}<label>预算口径<select name="scope"><option value="total" ${state.slots.scope==='total'?'selected':''}>所有人合计</option><option value="person" ${state.slots.scope==='person'?'selected':''}>每人</option></select></label></div><button class="primary">确认，看看这次怎么玩</button></form></section>`;
 }
 function proposalsView(){
-  if(state.phase!=='exploring'||!state.proposals?.length)return '';
-  return `<section class="proposal-section"><span class="eyebrow">${escape(state.slots.destination)} · 换一种玩法</span><h2>选一个有点心动的方向</h2>${revisitSummary()}<div class="proposal-grid">${state.proposals.map(item=>`<article class="proposal-card"><span>${escape(item.effort)} · 费用${escape(item.cost)}</span><h3>${escape(item.title)}</h3><strong>${escape(item.anchor)}</strong><p>${escape(item.supporting.join(' · '))}</p><p>${escape(item.novelty)}</p><small>${escape(item.tradeoff)}</small>${button('按这个方向安排','proposal',`data-proposal-id="${escape(item.id)}"`)}</article>`).join('')}</div><div class="proposal-footer">${button('这几个都不太对','explain')}<span>说说是内容、距离还是体力不合适，我再换。</span></div></section>`;
+  if(state.phase!=='exploring')return '';
+  const shortage=state.proposals.length<3?`<p class="proposal-shortage" role="status">${escape(state.answer||'当前没有足够证据生成可信方向，可以补充一个兴趣或调整条件。')}</p>`:'';
+  if(!state.proposals?.length)return `<section class="proposal-section"><span class="eyebrow">${escape(state.slots.destination)} · 借一双别人的眼睛</span><h2>这次，想象谁一样看这座城市？</h2>${revisitSummary()}${shortage}<div class="proposal-footer">${button('调整我的要求','explain')}<span>明确排除的内容不会自动放宽。</span></div></section>`;
+  return `<section class="proposal-section"><span class="eyebrow">${escape(state.slots.destination)} · 借一双别人的眼睛</span><h2>这次，想象谁一样看这座城市？</h2>${revisitSummary()}${shortage}<div class="proposal-grid">${state.proposals.map(item=>`<article class="proposal-card"><span class="perspective">${escape(item.perspective)}视角</span><h3>${escape(item.question||item.lensQuestion||item.title)}</h3><strong>从 ${escape(item.anchor)} 开始</strong><p class="proposal-actions"><b>试着做</b>${escape((item.activities||item.lensActions||item.supporting).join(' · '))}</p><p>${escape(item.novelty)}</p><p class="proposal-meta">${escape(item.effort)} · 费用${escape(item.cost)}</p><small>${escape(item.tradeoff)}</small>${button('用这个视角安排','proposal',`data-proposal-id="${escape(item.id)}"`)}</article>`).join('')}</div><div class="proposal-footer">${button('这几个都不太对','explain')}<span>也可以说“喜欢建筑师视角，但想少走一点”。</span></div></section>`;
 }
 function budgetOutputText(value){
   const amount=money(value)+(state.slots.scope==='person'?'/人':' 全员');
@@ -117,7 +132,7 @@ function planView(){
   const plan=state.plan;
   const budgetText=state.slots.scope==='person'?`每人 ${money(state.slots.budget)} · 全员 ${money(plan.budgetTotal)}`:`全员 ${money(plan.budgetTotal)}`;
   const budgetValue=budgetDraft??state.slots.budget;
-  return `<section class="overview"><span class="eyebrow">${state.slots.mode==='now'?'接下来的 '+state.slots.hours+' 小时':state.slots.days+' 天 · '+state.slots.people+' 人'}</span><h2>${escape(plan.title)}</h2>${state.selectedProposal?`<div class="selected-proposal"><strong>这次主线</strong><span>${escape(state.selectedProposal.title)} · ${escape(state.selectedProposal.anchor)}</span><p>${escape(state.selectedProposal.novelty)}</p><small>需要接受：${escape(state.selectedProposal.tradeoff)}</small></div>`:''}<div class="budgetline"><strong>当地行程估算 ${money(plan.estimatedTotal)}</strong><span>当地预算 ${budgetText}</span></div><p class="note">住宿、餐饮、当地交通和游玩的粗估${state.slots.mode==='now'?'。':'，不含从出发地往返的机票或火车。'}地点、价格与营业信息仍需确认。</p>${plan.estimatedTotal>plan.budgetTotal?'<p class="error">当前估算超出当地预算 '+money(plan.estimatedTotal-plan.budgetTotal)+'，可以选择“省一点”调整。</p>':''}<details><summary>微调当地预算</summary><input id="budget" aria-label="当地预算微调" type="range" min="${Math.max(1,state.baseBudget-500)}" max="${state.baseBudget+500}" value="${budgetValue}" step="50"><output id="budget-value">${budgetOutputText(budgetValue)}</output>${button('按这个预算调整','budget')}</details><div class="chips">${button('轻松一点','adjust','data-message="未锁定的日程减少步行和景点，轻松一点"')}${button('省一点','adjust','data-message="在当地预算内让未锁定的日程更省钱，不靠编造低价"')}${state.slots.mode==='now'?'':button('住好一点','adjust','data-message="当地预算不变，未锁定的日程住好一点，可减少其他消费"')}</div></section><div class="days">${plan.days.map((day,index)=>`<article class="day"><div class="dayhead"><span>${state.slots.mode==='now'?'现在出发':'DAY '+(index+1)} · ${escape(day.city)}</span>${button(state.lockedDays.includes(index)?'已保留 🔒':'保留这一天','lock',`data-day="${index}" aria-pressed="${state.lockedDays.includes(index)}"`)}</div>${cardNotice?.day===index?'<p class="card-notice" role="status">'+escape(cardNotice.text)+'</p>':''}<h3>${escape(day.title)}</h3><ol>${day.stops.map(stop=>`<li><span class="time">${escape(displayTime(stop.time))}</span><strong>${escape(stop.name)}</strong><p>${escape(stop.note)}</p></li>`).join('')}</ol><details><summary>${state.slots.mode==='now'?'吃什么 · 怎么走':'住哪里 · 吃什么 · 怎么走'}</summary><dl>${state.slots.mode==='now'?'':`<dt>住宿建议</dt><dd>${escape(day.hotel)}</dd>`}<dt>餐饮建议</dt><dd>${escape(day.food)}</dd><dt>交通建议</dt><dd>${escape(day.transport)}</dd><dt>当天全员费用粗估</dt><dd>${Object.entries(day.cost).map(([key,value])=>({stay:'住宿',food:'餐饮',transport:'交通',activities:'游玩'}[key])+' '+money(value)).join(' · ')}</dd></dl></details><div class="day-actions">${routes[index]?'':button('查看路线','route',`data-day="${index}" ${routeLoading===index?'disabled':''}`)}<div class="chips">${button('这天轻松点','day',`data-day="${index}" data-message="减少这一天的步行和景点，保持城市和住宿不变" ${state.lockedDays.includes(index)?'disabled':''}`)}${button('换个安排','day',`data-day="${index}" data-message="同一城市换一组不同的游览地点，住宿不变" ${state.lockedDays.includes(index)?'disabled':''}`)}</div></div>${routePanel(index)}</article>`).join('')}</div>`;
+  return `<section class="overview"><span class="eyebrow">${state.slots.mode==='now'?'接下来的 '+state.slots.hours+' 小时':state.slots.days+' 天 · '+state.slots.people+' 人'}</span><h2>${escape(plan.title)}</h2>${state.selectedProposal?`<div class="selected-proposal"><strong>${escape(state.selectedProposal.perspective)}视角</strong><span>从 ${escape(state.selectedProposal.anchor)} 开始</span><p>${escape(state.selectedProposal.question||state.selectedProposal.lensQuestion||state.selectedProposal.title)}</p><small>需要接受：${escape(state.selectedProposal.tradeoff)}</small></div>`:''}<div class="budgetline"><strong>当地行程估算 ${money(plan.estimatedTotal)}</strong><span>当地预算 ${budgetText}</span></div><p class="note">住宿、餐饮、当地交通和游玩的粗估${state.slots.mode==='now'?'。':'，不含从出发地往返的机票或火车。'}地点、价格与营业信息仍需确认。</p>${plan.estimatedTotal>plan.budgetTotal?'<p class="error">当前估算超出当地预算 '+money(plan.estimatedTotal-plan.budgetTotal)+'，可以微调预算或在具体日期选择“省一点”。</p>':''}<details><summary>微调当地预算</summary><input id="budget" aria-label="当地预算微调" type="range" min="${Math.max(1,state.baseBudget-500)}" max="${state.baseBudget+500}" value="${budgetValue}" step="50"><output id="budget-value">${budgetOutputText(budgetValue)}</output>${button('按这个预算调整','budget')}</details></section><div class="days">${plan.days.map((day,index)=>`<article class="day"><div class="dayhead"><span>${state.slots.mode==='now'?'现在出发':'DAY '+(index+1)} · ${escape(day.city)}</span>${button(state.lockedDays.includes(index)?'已保留 🔒':'保留这一天','lock',`data-day="${index}" aria-pressed="${state.lockedDays.includes(index)}"`)}</div>${cardNotice?.day===index?'<p class="card-notice" role="status">'+escape(cardNotice.text)+'</p>':''}<h3>${escape(day.title)}</h3><ol>${day.stops.map(stop=>`<li><span class="time">${escape(displayTime(stop.time))}</span><strong>${escape(stop.name)}</strong><p>${escape(stop.note)}</p></li>`).join('')}</ol><details><summary>${state.slots.mode==='now'?'吃什么 · 怎么走':'住哪里 · 吃什么 · 怎么走'}</summary><dl>${state.slots.mode==='now'?'':`<dt>住宿建议</dt><dd>${escape(day.hotel)}</dd>`}<dt>餐饮建议</dt><dd>${escape(day.food)}</dd><dt>交通建议</dt><dd>${escape(day.transport)}</dd><dt>当天全员费用粗估</dt><dd>${Object.entries(day.cost).map(([key,value])=>({stay:'住宿',food:'餐饮',transport:'交通',activities:'游玩'}[key])+' '+money(value)).join(' · ')}</dd></dl></details><div class="day-actions">${routes[index]?'':button('查看路线','route',`data-day="${index}" ${routeLoading===index?'disabled':''}`)}<div class="chips">${button('这天轻松点','day',`data-day="${index}" data-day-mode="lighter" data-message="缩短这一天的步行路线" ${state.lockedDays.includes(index)?'disabled':''}`)}${button('省一点','day',`data-day="${index}" data-day-mode="cheaper" data-message="降低这一天的全员费用" ${state.lockedDays.includes(index)?'disabled':''}`)}</div></div>${routePanel(index)}</article>`).join('')}</div>`;
 }
 function render(){
   const intro=!state.sessionId;
@@ -135,11 +150,11 @@ async function request(action,extra={}){
   if(action==='message')addMessage('user',extra.displayMessage||extra.message);
   if(action==='proposal')addMessage('user','选择玩法：'+(state.proposals.find(item=>item.id===extra.proposalId)?.title||'当前方向'));
   busy=true;error='';localAction=['lock','resume','day'].includes(action);
-  if(action==='day'){clearTimeout(noticeTimer);cardNotice={day:extra.day,text:'正在调整这一天…'};}
+  if(action==='day'){clearTimeout(noticeTimer);cardNotice={day:extra.day,text:extra.dayMode==='lighter'?'正在调整并核对步行距离…':extra.dayMode==='cheaper'?'正在调整并核对当天费用…':'正在调整这一天…'};}
   render();
   if(!localAction)root.querySelector('#feedback')?.scrollIntoView({block:'nearest'});
   try{
-    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action,...extra}),signal:AbortSignal.timeout(90000)});
+    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action,...extra}),signal:AbortSignal.timeout(45000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'请求失败');
     const previousReply=state.reply||'';
     const previousPlan=state.plan;
@@ -150,7 +165,7 @@ async function request(action,extra={}){
     if(action==='message')draft='';
     if(action!=='lock'&&action!=='resume')budgetDraft=null;
     if(action==='lock')showCardNotice(extra.day,result.lockedDays.includes(extra.day)?'已保留，后续调整不会改动这一天。':'已取消保留，可以调整这一天。');
-    if(action==='day')showCardNotice(extra.day,dayChangeNotice(previousPlan.days[extra.day],state.plan.days[extra.day]));
+    if(action==='day')showCardNotice(extra.day,result.answer||dayChangeNotice(previousPlan.days[extra.day],state.plan.days[extra.day]));
     try{sessionStorage.setItem(storageKey,JSON.stringify(state));}catch{}
   }catch(problem){
     const message=problem.name==='TimeoutError'?'请求超时，原方案没有改变，请重试。':problem.message;
@@ -163,20 +178,20 @@ async function requestRoute(day){
   const requestedSession=state.sessionId,requestedDay=daySignature(state.plan.days[day]);
   routeLoading=day;delete routeErrors[day];render();
   try{
-    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action:'route',day}),signal:AbortSignal.timeout(90000)});
+    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action:'route',day}),signal:AbortSignal.timeout(45000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'路线查询失败');
     if(state.sessionId===requestedSession&&daySignature(state.plan?.days[day])===requestedDay)routes[day]=result.route;
   }catch(problem){routeErrors[day]=problem.name==='TimeoutError'?'路线查询超时，请稍后重试。':problem.message;}
   finally{routeLoading=null;render();document.querySelector('#route-panel-'+day)?.scrollIntoView({block:'nearest'});}
 }
 root.addEventListener('input',event=>{if(event.target.name==='message')draft=event.target.value;if(event.target.id==='budget'){budgetDraft=Number(event.target.value);root.querySelector('#budget-value').textContent=budgetOutputText(budgetDraft);}});
-root.addEventListener('change',event=>{if(event.target.closest('#confirm')&&state.slots){const field=event.target;state.slots[field.name]=field.type==='number'?(field.value===''?null:Number(field.value)):field.value;}});
-root.addEventListener('submit',event=>{event.preventDefault();if(busy)return;const values=Object.fromEntries(new FormData(event.target));if(event.target.id==='chat')request('message',{message:values.message});if(event.target.id==='confirm'){for(const key of ['days','hours','people','budget'])if(key in values)values[key]=Number(values[key]);request('confirm',{slots:values});}});
+const parseList=value=>String(value||'').split(/[、，,；;\n]+/).map(item=>item.trim()).filter(Boolean);
+root.addEventListener('change',event=>{if(event.target.closest('#confirm')&&state.slots){const field=event.target;if(field.name==='avoid')state.revisit.avoid=parseList(field.value);else state.slots[field.name]=field.type==='number'?(field.value===''?null:Number(field.value)):field.value;}});
+root.addEventListener('submit',event=>{event.preventDefault();if(busy)return;const values=Object.fromEntries(new FormData(event.target));if(event.target.id==='chat')request('message',{message:values.message});if(event.target.id==='confirm'){const avoid=parseList(values.avoid);delete values.avoid;for(const key of ['days','hours','people','budget'])if(key in values)values[key]=Number(values[key]);request('confirm',{slots:values,revisit:{avoid}});}});
 root.addEventListener('click',event=>{
-  const target=event.target.closest('[data-action]');if(!target||busy)return;const {action,message,day,proposalId}=target.dataset;
+  const target=event.target.closest('[data-action]');if(!target||busy)return;const {action,message,day,dayMode,proposalId}=target.dataset;
   if(action==='example'){draft=message;render();root.querySelector('textarea').focus();}
-  if(action==='adjust')request('message',{message,displayMessage:target.textContent});
-  if(action==='day')request('day',{day:Number(day),message});
+  if(action==='day')request('day',{day:Number(day),dayMode,message});
   if(action==='lock')request('lock',{day:Number(day)});
   if(action==='budget')request('budget',{budget:budgetDraft??state.slots.budget});
   if(action==='route')requestRoute(Number(day));

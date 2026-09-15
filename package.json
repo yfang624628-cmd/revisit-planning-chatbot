@@ -1,1 +1,1 @@
-{"name":"trip-planner","type":"module","private":true,"scripts":{"dev":"node --env-file-if-exists=.env server.js","test":"node --test test/*.test.js"},"engines":{"node":">=22"},"dependencies":{"undici":"^7.29.1"}}
+{"name":"trip-planner","type":"module","private":true,"scripts":{"dev":"node --env-file-if-exists=.env server.js","test":"node --test test/*.test.js","content:check":"node content-cli.js check","content:preview":"node content-cli.js preview"},"engines":{"node":">=22"},"dependencies":{"undici":"^7.29.1"}}
