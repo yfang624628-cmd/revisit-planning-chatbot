@@ -19,6 +19,17 @@ export function validateContent(config){
       if(ids.has(item.id))issues.push(`${type}.${item.id}: ID 重复`);else ids.add(item.id);
       if(!['draft','published','archived'].includes(item.status))issues.push(`${type}.${item.id||'?'}: status 无效`);
       if(type==='rules'&&item.minRoleScore!==undefined&&(!Number.isFinite(item.minRoleScore)||item.minRoleScore<0))issues.push(`${type}.${item.id||'?'}: minRoleScore 无效`);
+      if(type==='rules'&&item.spatialDiversity!==undefined){
+        const spatial=item.spatialDiversity;
+        if(!isObject(spatial))issues.push(`${type}.${item.id||'?'}.spatialDiversity: 必须是对象`);
+        else{
+          if(typeof spatial.enabled!=='boolean')issues.push(`${type}.${item.id||'?'}.spatialDiversity.enabled: 必须是布尔值`);
+          if(!Number.isFinite(spatial.activityRadiusMeters)||spatial.activityRadiusMeters<100||spatial.activityRadiusMeters>50000)issues.push(`${type}.${item.id||'?'}.spatialDiversity.activityRadiusMeters: 应在 100–50000 米`);
+          if(!Number.isFinite(spatial.maxOverlapRatio)||spatial.maxOverlapRatio<0||spatial.maxOverlapRatio>1)issues.push(`${type}.${item.id||'?'}.spatialDiversity.maxOverlapRatio: 应在 0–1`);
+          if(!Number.isInteger(spatial.minimumLocatedStops)||spatial.minimumLocatedStops<1||spatial.minimumLocatedStops>5)issues.push(`${type}.${item.id||'?'}.spatialDiversity.minimumLocatedStops: 应为 1–5`);
+          if(!['reject','skip'].includes(spatial.onLocationFailure))issues.push(`${type}.${item.id||'?'}.spatialDiversity.onLocationFailure: 只能是 reject 或 skip`);
+        }
+      }
     }
   }
   return issues;
@@ -36,9 +47,13 @@ export function rollbackContent(){if(!previous)return {ok:false,issues:['没有�
 
 const activeItems=items=>items.filter(item=>item.status==='published');
 const materialIdFromDirection=id=>typeof id==='string'&&id.startsWith('direction:')?id.split(':')[1]:null;
+export async function planningRule(){
+  const config=await getContent();
+  return activeItems(config.rules)[0]||{};
+}
 export async function generationContext({city,slots={},revisit={},excluded=[]}={}){
   const config=await getContent();
-  const rule=activeItems(config.rules)[0]||{maxCandidates:8,maxCards:3,actionsPerCard:2,uniqueMaterial:true,uniqueRole:true,excludeShownMaterials:true};
+  const rule=await planningRule();
   const excludedMaterials=rule.excludeShownMaterials?excluded.map(materialIdFromDirection).filter(Boolean):[];
   const scopedRevisit={...revisit,area:slots.area||''};
   const materials=materialCandidatesFor(city,scopedRevisit,excludedMaterials).slice(0,rule.maxCandidates);

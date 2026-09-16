@@ -65,7 +65,7 @@ function routeMap(route){
     if(tileY<0||tileY>=maxTile)continue;
     for(let tileX=Math.floor(left/tileSize);tileX<=Math.floor((left+width)/tileSize);tileX++){
       const wrapped=(tileX%maxTile+maxTile)%maxTile;
-      tiles.push(`<image href="https://tile.openstreetmap.org/${zoom}/${wrapped}/${tileY}.png" x="${Math.round(tileX*tileSize-left)}" y="${Math.round(tileY*tileSize-top)}" width="256" height="256"></image>`);
+      tiles.push(`<image href="/api/map-tile/${zoom}/${wrapped}/${tileY}.png" x="${Math.round(tileX*tileSize-left)}" y="${Math.round(tileY*tileSize-top)}" width="256" height="256" onerror="this.style.display='none'"></image>`);
     }
   }
   const lines=routeSegments.map(segment=>`<polyline points="${segment.map(([lon,lat])=>{const point=worldPoint(lon,lat,zoom);return `${(point.x-left).toFixed(1)},${(point.y-top).toFixed(1)}`;}).join(' ')}"></polyline>`).join('');
@@ -85,8 +85,8 @@ function routePanel(index){
   if(!route)return '';
   const coverage=`已匹配 ${route.points.length}/${route.totalStops} 站`;
   if(!route.points.length)return `<div class="route-panel route-error" id="route-panel-${index}"><p>${escape(route.serviceWarning||'这几个地点暂时没匹配到，行程仍可查看。')}</p><p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}</p>${button('重试','route',`data-day="${index}"`)}</div>`;
-  const summary=route.distance!==null?`<div class="route-summary"><strong>${coverage}</strong><span>按步行路线连接约 ${(route.distance/1000).toFixed(1)} 公里 · ${Math.max(1,Math.round(route.duration/60))} 分钟${route.includesFerry?' · 含渡轮路段':''}</span></div>`:`<div class="route-summary"><strong>${coverage}</strong><span>${route.routeUnavailable?'暂未找到这些地点间的步行连接':'至少匹配两站后显示步行距离'}</span></div>`;
-  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.serviceWarning?`<p class="route-warning">${escape(route.serviceWarning)}</p>${button('重试','route',`data-day="${index}"`)}`:''}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}<p class="map-note">用于理解已匹配地点怎样连接，不是实时导航。</p></div>`;
+  const summary=route.distance!==null?`<div class="route-summary"><strong>${coverage}</strong><span>步行约 ${(route.distance/1000).toFixed(1)} 公里 · ${Math.max(1,Math.round(route.duration/60))} 分钟${route.includesFerry?' · 含渡轮路段':''}</span></div>`:`<div class="route-summary"><strong>${coverage}</strong><span>步行距离暂不可用</span></div>`;
+  return `<div class="route-panel" id="route-panel-${index}">${routeMap(route)}${summary}${route.serviceWarning?`<p class="route-warning">${escape(route.serviceWarning)}</p>${button('重试','route',`data-day="${index}"`)}`:''}${route.unresolved.length?`<p class="route-warning">未匹配：${escape(route.unresolved.join('、'))}。上方距离不包含这些地点。</p>`:''}</div>`;
 }
 const button=(text,action,extra='')=>`<button type="button" data-action="${action}" ${extra}>${escape(text)}</button>`;
 function revisitSummary(){
@@ -154,7 +154,7 @@ async function request(action,extra={}){
   render();
   if(!localAction)root.querySelector('#feedback')?.scrollIntoView({block:'nearest'});
   try{
-    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action,...extra}),signal:AbortSignal.timeout(45000)});
+    const response=await fetch('/api/planner',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:state.sessionId,action,...extra}),signal:AbortSignal.timeout(120000)});
     const result=await response.json();if(!response.ok)throw new Error(result.error||'请求失败');
     const previousReply=state.reply||'';
     const previousPlan=state.plan;

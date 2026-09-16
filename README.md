@@ -25,7 +25,7 @@ cp .env.example .env
 npm run dev
 ```
 
-打开 <http://127.0.0.1:5173>。如需代理，设置 `TRAVEL_PLANNER_PROXY`；后端不会自动使用系统代理。
+打开 <http://127.0.0.1:5173>。地点定位默认使用基于 OSM 数据的 Photon，并以 Nominatim 作为后备；步行道路由 OSM 路由服务计算。如需代理，设置 `TRAVEL_PLANNER_PROXY`；后端不会自动使用系统代理。
 
 ## 验证与文档
 

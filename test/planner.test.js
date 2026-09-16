@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {interpretSupplement,parseModelJSON,plannerAPI,validatePlan} from '../planner-api.js';
+import {interpretSupplement,parseModelJSON,plannerAPI as plannerAPIRaw,validatePlan} from '../planner-api.js';
 import {routeForDay} from '../map-service.js';
 import {materialCandidatesFor,resolveSupportedArea,resolveSupportedAreas,resolveSupportedCity,supportedCities} from '../revisit-catalog.js';
 import {contentPreview,generationContext,getContent,validateContent} from '../content-store.js';
+import {activityOverlapRatio,validateSpatialDiversity} from '../spatial-diversity.js';
+
+const plannerAPI=(input,dependencies={})=>plannerAPIRaw(input,{spatialValidator:async()=>{},...dependencies});
 
 const slots={mode:'trip',destination:'香港',origin:'深圳',date:'',days:2,people:2,budget:8000,scope:'total'};
 const revisit={visitedBefore:true,wantsIdeas:false,direction:'街区慢逛',avoid:[],revisit:[],liked:[],interests:['街区'],pace:'',mobility:''};
@@ -36,6 +39,29 @@ test('内容配置与地点库分离，不需要预设角色地点绑定',async(
   for(const city of supportedCities)assert.equal((await generationContext({city})).materials.length,16);
   const preview=await contentPreview({city:'上海',roleId:'restorer'});
   assert.equal(preview.version,config.version);assert.deepEqual(preview.roles.map(item=>item.id),['restorer']);
+  assert.deepEqual(config.rules[0].spatialDiversity,{enabled:true,activityRadiusMeters:3000,maxOverlapRatio:.5,minimumLocatedStops:2,onLocationFailure:'reject'});
+});
+test('活动范围按坐标和可配置半径校验，不按片区地名判断',async()=>{
+  const shared={lat:22.3,lon:114.17};
+  const left=[shared,{lat:22.31,lon:114.17},{lat:22.32,lon:114.17}];
+  const distinct=[shared,{lat:22.4,lon:114.3},{lat:22.42,lon:114.32}];
+  assert.equal(activityOverlapRatio(left,distinct,1000),1/3);
+  let index=0;
+  await validateSpatialDiversity({days:[{},{}]},'香港',{enabled:true,activityRadiusMeters:1000,maxOverlapRatio:.5,minimumLocatedStops:2,onLocationFailure:'reject'},async()=>({points:[left,distinct][index++]}));
+  const overlapping=[shared,{lat:22.3105,lon:114.17},{lat:22.5,lon:114.5}];
+  index=0;
+  await assert.rejects(()=>validateSpatialDiversity({days:[{},{}]},'香港',{enabled:true,activityRadiusMeters:1000,maxOverlapRatio:.5,minimumLocatedStops:2,onLocationFailure:'reject'},async()=>({points:[left,overlapping][index++]})),/重叠 67%/);
+  index=0;
+  await validateSpatialDiversity({days:[{},{}]},'香港',{enabled:true,activityRadiusMeters:10,maxOverlapRatio:.5,minimumLocatedStops:2,onLocationFailure:'reject'},async()=>({points:[left,overlapping][index++]}));
+});
+test('首次生成和单日重生成都执行活动范围校验',async()=>{
+  let checks=0;
+  const spatialValidator=async()=>{checks++;};
+  const first=await plannerAPIRaw({message:'测试'},{callModel:async()=>extracted(),spatialValidator});
+  const confirmed=await plannerAPIRaw({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(plan),spatialValidator});
+  assert.equal(checks,1);
+  await plannerAPIRaw({sessionId:confirmed.sessionId,action:'day',day:1,message:'换一个'},{callModel:async()=>({day:day('西贡')}),spatialValidator});
+  assert.equal(checks,2);
 });
 test('召回结果记录分项理由，并将明确少走作为可行性约束',()=>{
   const candidates=materialCandidatesFor('香港',{area:'黄竹坑',interests:['建筑'],pace:'不想走太多'});
@@ -383,27 +409,25 @@ test('校验失败时带驳回原因自动重试，修正后通过',async()=>{
   assert.equal(result.phase,'planned');
   assert.equal(result.plan.days.length,2);
 });
-test('偏好片区至少一天覆盖，多天不得全困在片区内',async()=>{
+test('偏好片区只校验至少一天覆盖，不再用地名判断多日范围重复',async()=>{
   const areaSlots={...slots,area:'旺角'};
   const allInArea={title:'全旺角',days:[
     {title:'旺角市集',city:'香港',stops:[{time:'10:00–11:00',name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},
     {title:'旺角旧楼',city:'香港',stops:[{time:'10:00–11:00',name:'旺角花墟道',mapQuery:'Flower Market Road',note:'看花墟'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}}
   ]};
-  const mixed={title:'旺角加西贡',days:[allInArea.days[0],{...day('西贡'),stops:[{time:'10:00–11:00',name:'西贡海旁',mapQuery:'Sai Kung Promenade',note:'海边走走'}]}]};
   const first=await plannerAPI({message:'香港再去，主要在旺角附近'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:false,direction:'旺角慢逛'}})});
   let calls=0;
   const result=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots:areaSlots},{callModel:async()=>{
     calls++;
-    return structuredClone(calls===1?allInArea:mixed);
+    return structuredClone(allInArea);
   }});
-  assert.equal(calls,2,'每天都困在片区的方案应被驳回并重试');
+  assert.equal(calls,1,'地点名称相同不应触发活动范围判定');
   assert.equal(result.phase,'planned');
   assert.ok(result.plan.days.some(item=>item.stops.some(stop=>stop.mapQuery==='Goldfish Market Hong Kong')));
-  assert.ok(result.plan.days.some(item=>item.stops.every(stop=>!['Goldfish Market Hong Kong','Flower Market Road'].includes(stop.mapQuery)&&!/旺角/.test(stop.name))));
   const uncovered=await plannerAPI({message:'香港再去，主要在旺角附近'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:false,direction:'旺角慢逛'}})});
   await assert.rejects(()=>plannerAPI({sessionId:uncovered.sessionId,action:'confirm',slots:areaSlots},{callModel:async()=>structuredClone(plan)}),/旺角/);
 });
-test('用户明确全程留在片区时不做多样性驳回',async()=>{
+test('全程片区约束仍可生成，空间多样性另由坐标规则校验',async()=>{
   const areaSlots={...slots,area:'旺角',areaScope:'all'};
   const allInArea={title:'全旺角',days:[
     {title:'旺角市集',city:'香港',stops:[{time:'10:00–11:00',name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},

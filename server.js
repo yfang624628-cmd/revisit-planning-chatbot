@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { plannerAPI } from './planner-api.js';
+import { mapTile } from './map-service.js';
 import {contentPreview,reloadContent,rollbackContent,getContent} from './content-store.js';
 
 const PORT = process.env.PORT || 5173;
@@ -13,6 +14,15 @@ const MIME = { '.html':'text/html; charset=utf-8', '.js':'text/javascript; chars
 
 createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
+
+  const tileMatch=url.pathname.match(/^\/api\/map-tile\/(\d{1,2})\/(\d+)\/(\d+)\.png$/);
+  if(tileMatch){
+    if(req.method!=='GET'){res.writeHead(405);return res.end();}
+    const tile=await mapTile(...tileMatch.slice(1).map(Number));
+    if(!tile){res.writeHead(204,{'cache-control':'no-store'});return res.end();}
+    res.writeHead(200,{'content-type':tile.contentType,'cache-control':'public, max-age=86400'});
+    return res.end(tile.body);
+  }
 
   if (url.pathname === '/api/planner') {
     const respond = (status, body) => { res.writeHead(status, {'content-type':'application/json; charset=utf-8','cache-control':'no-store'}); res.end(JSON.stringify(body)); };
@@ -29,6 +39,7 @@ createServer(async (req, res) => {
       if (!input || typeof input !== 'object' || Array.isArray(input)) return respond(400,{error:'请求格式不正确'});
       return respond(200, await plannerAPI(input));
     } catch (error) {
+      console.error('[planner]',error);
       return respond(error.status || 502,{error:error.status ? error.message : '连接超时或服务不可用，行程没有变化。'});
     }
   }

@@ -1,5 +1,5 @@
 {
-  "version": "2026-09-15.5",
+  "version": "2026-09-16.1",
   "status": "published",
   "roles": [
     {"id":"maker","status":"published","name":"手艺人","care":"材料、工具与制作过程","method":"从手作痕迹理解一条街的生产方式","keywords":["手作","市场","旧街","工业"]},
@@ -26,6 +26,6 @@
     {"id":"record","status":"published","name":"留下记录","instruction":"用照片、文字或声音记录一个有判断的问题"}
   ],
   "rules": [
-    {"id":"generative-directions-v1","status":"published","maxCandidates":16,"maxCards":3,"actionsPerCard":2,"minRoleScore":2,"uniqueMaterial":true,"uniqueRole":true,"excludeShownMaterials":true}
+    {"id":"generative-directions-v1","status":"published","maxCandidates":16,"maxCards":3,"actionsPerCard":2,"minRoleScore":2,"uniqueMaterial":true,"uniqueRole":true,"excludeShownMaterials":true,"spatialDiversity":{"enabled":true,"activityRadiusMeters":3000,"maxOverlapRatio":0.5,"minimumLocatedStops":2,"onLocationFailure":"reject"}}
   ]
 }
