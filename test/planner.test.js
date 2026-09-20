@@ -8,11 +8,34 @@ import {activityOverlapRatio,validateSpatialDiversity} from '../spatial-diversit
 
 const plannerAPI=(input,dependencies={})=>plannerAPIRaw(input,{spatialValidator:async()=>{},...dependencies});
 
-const slots={mode:'trip',destination:'香港',origin:'深圳',date:'',days:2,people:2,budget:8000,scope:'total'};
+const slots={mode:'trip',destination:'香港',origin:'深圳',date:'',days:2,people:2,budget:8000,scope:'total',dayPart:'daytime',dailyHours:5};
 const revisit={visitedBefore:true,wantsIdeas:false,direction:'街区慢逛',avoid:[],revisit:[],liked:[],interests:['街区'],pace:'',mobility:''};
 const extracted=()=>({slots,revisit});
-const day=name=>({title:name,city:'香港',stops:[{time:'10:00–11:00',name,note:'慢慢游览'}],hotel:'港铁站附近住宿',food:'附近简餐',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}});
+const day=name=>({title:name,city:'香港',stops:[{durationMinutes:300,name,mapQuery:name,note:'慢慢游览'}],hotel:'港铁站附近住宿',food:'附近简餐',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}});
 const plan={title:'香港两天',days:[day('大坑'),day('深水埗')]};
+test('首次生成范围冲突时携带草稿和坐标自动重新选址，成功后才发布',async()=>{
+  const locateDay=async value=>({points:value.title==='西贡'?[{lat:22.4,lon:114.3},{lat:22.41,lon:114.31}]:[{lat:22.28,lon:114.18},{lat:22.281,lon:114.181}]});
+  const first=await plannerAPIRaw({message:'测试'},{callModel:async()=>extracted()});
+  let calls=0;
+  const result=await plannerAPIRaw({sessionId:first.sessionId,action:'confirm',slots},{locateDay,callModel:async messages=>{
+    calls++;
+    if(calls===1)return structuredClone(plan);
+    assert.deepEqual(JSON.parse(messages.at(-2).content).days,plan.days);
+    const repair=JSON.parse(messages.at(-1).content);
+    assert.equal(repair.changeDay,2);
+    assert.equal(repair.activityRadiusMeters,3000);
+    assert.equal(repair.avoidActivityRanges.length,1);
+    assert.equal(repair.rejectedStops[0].name,'深水埗');
+    return {title:'新地点',days:[day('大坑'),day('西贡')]};
+  }});
+  assert.equal(calls,2);
+  assert.equal(result.plan.days[1].title,'西贡');
+});
+test('首次生成反复冲突不会声称已有原方案，也不会发布失败草稿',async()=>{
+  const first=await plannerAPIRaw({message:'测试'},{callModel:async()=>extracted()});
+  await assert.rejects(()=>plannerAPIRaw({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(plan),locateDay:async()=>({points:[{lat:22.28,lon:114.18},{lat:22.281,lon:114.181}]})}),error=>/重新选择地点/.test(error.message)&&!/原方案|100%|配置/.test(error.message));
+  assert.equal((await plannerAPIRaw({sessionId:first.sessionId,action:'resume'})).plan,null);
+});
 const directionModel=async messages=>{
   const payload=JSON.parse(messages.at(-1).content),usedRoles=new Set(),proposals=[];
   for(const material of payload.materials||[]){
@@ -29,6 +52,12 @@ test('模型 JSON 解析兼容代码块和前置说明',()=>{
   assert.deepEqual(parseModelJSON('```json\n{"slots":{"days":2}}\n```'),{slots:{days:2}});
   assert.deepEqual(parseModelJSON('结果如下：{"revisit":{"visitedBefore":true}}'),{revisit:{visitedBefore:true}});
   assert.throws(()=>parseModelJSON(''),/empty/);
+});
+test('确认时空的可选槽位会按未填写处理，不影响生成',async()=>{
+  const first=await plannerAPI({message:'测试'},{callModel:async()=>extracted()});
+  const result=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots:{...slots,area:null,origin:null,date:null}},{callModel:async()=>structuredClone(plan)});
+  assert.equal(result.phase,'planned');
+  assert.equal(result.slots.area,'');assert.equal(result.slots.origin,'');assert.equal(result.slots.date,'');
 });
 test('内容配置与地点库分离，不需要预设角色地点绑定',async()=>{
   const config=await getContent();
@@ -60,7 +89,7 @@ test('首次生成和单日重生成都执行活动范围校验',async()=>{
   const first=await plannerAPIRaw({message:'测试'},{callModel:async()=>extracted(),spatialValidator});
   const confirmed=await plannerAPIRaw({sessionId:first.sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(plan),spatialValidator});
   assert.equal(checks,1);
-  await plannerAPIRaw({sessionId:confirmed.sessionId,action:'day',day:1,message:'换一个'},{callModel:async()=>({day:day('西贡')}),spatialValidator});
+  await plannerAPIRaw({sessionId:confirmed.sessionId,action:'reroll_day',day:1},{callModel:async()=>({day:day('西贡')}),spatialValidator});
   assert.equal(checks,2);
 });
 test('召回结果记录分项理由，并将明确少走作为可行性约束',()=>{
@@ -69,6 +98,21 @@ test('召回结果记录分项理由，并将明确少走作为可行性约束',
   assert.ok(candidates.every(item=>!/步行较多/.test(item.effort)));
   assert.ok(candidates[0].retrieval&&Number.isInteger(candidates[0].retrieval.score));
   assert.ok(candidates.some(item=>item.retrieval.areaMatches.includes('黄竹坑')));
+});
+test('填写偏好片区后，方向结果必须包含一个明确命中该片区的素材',async()=>{
+  const areaSlots={...slots,area:'铜锣湾'};
+  const first=await plannerAPI({message:'两个人再去香港2天，预算8000，偏好铜锣湾'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:true,interests:['街区']}})});
+  const matched=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots:areaSlots},{callModel:directionModel});
+  assert.ok(matched.proposals.some(item=>item.evidence.retrieval.areaMatches.includes('铜锣湾')));
+
+  const second=await plannerAPI({message:'两个人再去香港2天，预算8000，偏好铜锣湾'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:true,interests:['街区']}})});
+  const ignored=await plannerAPI({sessionId:second.sessionId,action:'confirm',slots:areaSlots},{callModel:async messages=>{
+    const payload=JSON.parse(messages.at(-1).content);
+    const outside={...payload,materials:payload.materials.filter(item=>!item.retrieval.areaMatches.length)};
+    return directionModel([{role:'user',content:JSON.stringify(outside)}]);
+  }});
+  assert.equal(ignored.proposals.length,0);
+  assert.equal(ignored.proposalStatus,'insufficient_evidence');
 });
 test('方向卡每轮三个地点不重复，刷新优先使用未展示地点',async()=>{
   const first=await plannerAPI({message:'香港去过两次，先给我方向'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true}})});
@@ -98,6 +142,23 @@ test('兼容模型把再访布尔值返回成常见文字',async()=>{
   assert.equal(result.revisit.visitedBefore,true);
   assert.equal(result.revisit.wantsIdeas,true);
   assert.equal(result.phase,'confirming');
+});
+test('未说明时段默认白天约5小时，不依赖模型返回默认值',async()=>{
+  const result=await plannerAPI({message:'两个人再去香港玩2天，预算8000'},{callModel:async()=>({slots:{destination:'香港',days:2,people:2,budget:8000},revisit:{visitedBefore:true,wantsIdeas:true}})});
+  assert.equal(result.slots.dayPart,'daytime');
+  assert.equal(result.slots.dailyHours,5);
+});
+test('上午下午晚间只记录内容时段，游玩量仍以4至6小时表示',async()=>{
+  const afternoon=await plannerAPI({message:'两个人下午逛香港，每天5小时，玩2天，预算8000'},{callModel:async()=>({slots:{destination:'香港',days:2,people:2,budget:8000},revisit:{visitedBefore:true,wantsIdeas:true}})});
+  assert.equal(afternoon.slots.dayPart,'afternoon');
+  assert.equal(afternoon.slots.dailyHours,5);
+  const evening=await plannerAPI({message:'晚上安排半天就好'},{callModel:async()=>({slots:{},revisit:{}})});
+  assert.equal(evening.slots.dayPart,'evening');
+  assert.equal(evening.slots.dailyHours,4);
+});
+test('晚餐偏好不把整天误判成晚间路线',async()=>{
+  const result=await plannerAPI({message:'两个人在上海玩1天，预算600，晚上好好吃顿饭'},{callModel:async()=>({slots:{destination:'上海',days:1,people:2,budget:600},revisit:{visitedBefore:true,wantsIdeas:true}})});
+  assert.equal(result.slots.dayPart,'daytime');
 });
 test('首页固定话术由代码识别再访状态，忽略模型漂移字段',async()=>{
   const result=await plannerAPI({message:'两个人再去柏林3天，当地总预算5000元人民币。上次主要逛博物馆，这次想围绕街区和吃饭安排，晚出门也可以。'},{callModel:async()=>({slots:{...slots,destination:'柏林',days:3,budget:5000},revisit:{visitedBefore:'第二次去',wantsIdeas:'看情况',interests:'街区和吃饭',unexpected:'忽略'}})});
@@ -186,7 +247,7 @@ test('没想法的再访用户先选玩法，再保留锚点生成行程',async(
   assert.equal(explored.phase,'exploring');assert.equal(explored.proposals.length,3);assert.equal(explored.plan,null);
   const selected=explored.proposals[0];
   const activity=(selected.activities||selected.lensActions)[0];
-  const generated={title:'香港再访',days:[{...day(selected.title),stops:[{time:'10:00–11:00',name:selected.anchor,mapQuery:selected.mapQuery,note:'安排'+activity}]},day('另一日')]};
+  const generated={title:'香港再访',days:[{...day(selected.title),stops:[{durationMinutes:300,name:selected.anchor,mapQuery:selected.mapQuery,note:'安排'+activity}]},day('另一日')]};
   const finished=await plannerAPI({sessionId:first.sessionId,action:'proposal',proposalId:selected.id},{callModel:async()=>structuredClone(generated)});
   assert.equal(finished.phase,'planned');assert.equal(finished.selectedProposal.id,selected.id);
   assert.ok(finished.plan.days.some(item=>item.stops.some(stop=>stop.mapQuery===selected.mapQuery)));
@@ -258,7 +319,7 @@ test('服务端将核心行动绑定到锚点，不要求模型生成内部承�
   const first=await plannerAPI({message:'香港去过两次，想看城市更新'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:true,interests:['城市更新']}})});
   const explored=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:directionModel});
   const selected=explored.proposals[0];
-  const unbound={title:'香港观察',days:[{...day('第一日'),stops:[{time:'10:00–11:00',name:selected.anchor,mapQuery:selected.mapQuery,note:'普通游览'}]},day('另一日')]};
+  const unbound={title:'香港观察',days:[{...day('第一日'),stops:[{durationMinutes:300,name:selected.anchor,mapQuery:selected.mapQuery,note:'普通游览'}]},day('另一日')]};
   const finished=await plannerAPI({sessionId:first.sessionId,action:'proposal',proposalId:selected.id},{callModel:async()=>structuredClone(unbound)});
   const commitmentStop=finished.plan.days.flatMap(item=>item.stops).find(stop=>stop.commitmentId===selected.corePromise.id);
   assert.ok(commitmentStop);
@@ -346,7 +407,15 @@ test('追问3天改5天先更新条件，保留锁定天；失败则整体回滚
   await plannerAPI({sessionId,action:'lock',day:4});
   await assert.rejects(()=>plannerAPI({sessionId,action:'message',message:'改3天'},{callModel:async()=>({...structuredClone(originalPlan),slots:{days:3}})}),/解除/);
 });
-test('先收集确认，再生成；单日修改和锁定都由服务端保留',async()=>{
+test('必填槽位齐全时不强迫填写可选偏好',async()=>{
+  const first=await plannerAPI({message:'两个人去香港玩2天，预算3000元，以前去过'},{callModel:async()=>({slots:{...slots,budget:3000},revisit:{visitedBefore:true}})});
+  assert.equal(first.phase,'confirming');
+  assert.equal(first.revisit.wantsIdeas,true);
+  assert.doesNotMatch(first.answer,/想重温|想避开|感兴趣/);
+  const confirmed=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots:{...slots,budget:3000}},{callModel:directionModel});
+  assert.equal(confirmed.phase,'exploring');
+});
+test('先收集确认，再生成；单日换一换和锁定都由服务端保留',async()=>{
   let result=await plannerAPI({message:'再去香港'},{callModel:async()=>extracted()});
   assert.equal(result.plan,null);
   const sessionId=result.sessionId;
@@ -356,35 +425,61 @@ test('先收集确认，再生成；单日修改和锁定都由服务端保留',
   await plannerAPI({sessionId,action:'lock',day:0});
   result=await plannerAPI({sessionId,action:'message',message:'轻松一点'},{callModel:async()=>({title:'新版',days:[day('模型企图改锁定天'),day('公园')]})});
   assert.deepEqual(result.plan.days[0],original);
-  result=await plannerAPI({sessionId,action:'day',day:1,message:'换一个'},{callModel:async()=>({day:day('银座')})});
+  result=await plannerAPI({sessionId,action:'reroll_day',day:1},{callModel:async()=>({day:day('银座')})});
   assert.deepEqual(result.plan.days[0],original);
   assert.equal(result.plan.days[1].title,'银座');
-  await assert.rejects(()=>plannerAPI({sessionId,action:'day',day:0,message:'换一个'}),/锁定/);
+  assert.match(result.answer,/其他天没有改变/);
+  assert.deepEqual(result.dayHistory['1'],['公园','银座']);
+  await assert.rejects(()=>plannerAPI({sessionId,action:'reroll_day',day:0}),/解除保留/);
   await assert.rejects(()=>plannerAPI({sessionId,action:'budget',budget:9000}),/500/);
 });
-test('单日轻松必须缩短真实步行路线，省一点必须降低当天费用',async()=>{
+test('单日换一换缺少 day 包装会重试，重复地点三次后保留原安排',async()=>{
   const first=await plannerAPI({message:'测试'},{callModel:async()=>extracted()});
   const sessionId=first.sessionId;
   await plannerAPI({sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(plan)});
-  const distances={深水埗:3000,近处:1000,更远:2000};
-  const routeDay=async currentDay=>({distance:distances[currentDay.title]});
-  let result=await plannerAPI({sessionId,action:'day',day:1,dayMode:'lighter',message:'缩短步行路线'},{callModel:async()=>({day:day('近处')}),routeDay});
-  assert.equal(result.plan.days[1].title,'近处');
-  assert.match(result.answer,/3.0 公里.*1.0 公里/);
-  await assert.rejects(()=>plannerAPI({sessionId,action:'day',day:1,dayMode:'lighter',message:'再轻松一点'},{callModel:async()=>({day:day('更远')}),routeDay}),/没有变短/);
-  assert.equal((await plannerAPI({sessionId,action:'resume'})).plan.days[1].title,'近处');
-  const cheaper=day('省钱');cheaper.cost.food=100;
-  result=await plannerAPI({sessionId,action:'day',day:1,dayMode:'cheaper',message:'省一点'},{callModel:async()=>({day:cheaper}),routeDay});
-  assert.equal(result.plan.days[1].title,'省钱');
-  assert.match(result.answer,/¥750.*¥650/);
+  let calls=0;
+  const result=await plannerAPI({sessionId,action:'reroll_day',day:0},{callModel:async()=>{
+    calls++;
+    if(calls===1)return structuredClone(plan);
+    return {day:day('新地点')};
+  }});
+  assert.equal(calls,2);
+  assert.equal(result.plan.days[0].title,'新地点');
+  const before=structuredClone(result.plan.days[0]);
+  await assert.rejects(()=>plannerAPI({sessionId,action:'reroll_day',day:0},{callModel:async()=>({day:{...day('只改标题'),stops:[{...day('新地点').stops[0]}]}})}),/暂时没找到/);
+  assert.deepEqual((await plannerAPI({sessionId,action:'resume'})).plan.days[0],before);
+});
+test('锚点日换一换保留锚点、承诺和其他天',async()=>{
+  const first=await plannerAPI({message:'测试'},{callModel:async()=>extracted()});
+  const sessionId=first.sessionId;
+  const anchorDay={...day('锚点日'),stops:[{durationMinutes:150,name:'鹅颈街市',mapQuery:'Bowrington Road Market',note:'现场行动：观察摊位与街道关系',commitmentId:'commitment:test'},{durationMinutes:150,name:'旧地点',mapQuery:'Old Place',note:'慢慢游览'}]};
+  const basePlan={title:'香港两天',days:[anchorDay,day('另一日')]};
+  let result=await plannerAPI({sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(basePlan)});
+  const snapshot={...result,selectedProposal:{anchor:'铜锣湾 · 鹅颈街市',mapQuery:'Bowrington Road Market',effort:'步行适中',tradeoff:'',tags:[],corePromise:{id:'commitment:test',action:'观察摊位与街道关系'}}};
+  result=await plannerAPI({sessionId:'restore-anchor',action:'resume',snapshot});
+  const unchanged=structuredClone(result.plan.days[1]);
+  const replacement={...anchorDay,title:'锚点日新版',stops:[{...anchorDay.stops[0]},{durationMinutes:150,name:'新地点',mapQuery:'New Place',note:'继续观察街区'}]};
+  result=await plannerAPI({sessionId:result.sessionId,action:'reroll_day',day:0},{callModel:async()=>({day:replacement})});
+  assert.deepEqual(result.plan.days[1],unchanged);
+  const kept=result.plan.days[0].stops.find(stop=>stop.mapQuery==='Bowrington Road Market');
+  assert.equal(kept.commitmentId,'commitment:test');
+  assert.match(kept.note,/观察摊位与街道关系/);
+  assert.match(result.answer,/已保留「铜锣湾 · 鹅颈街市」/);
+});
+test('单日换一换模型失败不覆盖原安排',async()=>{
+  const first=await plannerAPI({message:'测试'},{callModel:async()=>extracted()});
+  const sessionId=first.sessionId;
+  const ready=await plannerAPI({sessionId,action:'confirm',slots},{callModel:async()=>structuredClone(plan)});
+  await assert.rejects(()=>plannerAPI({sessionId,action:'reroll_day',day:1},{callModel:async()=>{throw Object.assign(new Error('timeout'),{status:504});}}),/timeout/);
+  assert.deepEqual((await plannerAPI({sessionId,action:'resume'})).plan,ready.plan);
 });
 test('途中不要求出发地日期，缺人数预算不能生成',async()=>{
   const result=await plannerAPI({message:'中环三小时'},{callModel:async()=>({slots:{mode:'now',destination:'香港中环',hours:3}})});
   assert.match(result.answer,/人数/);assert.match(result.answer,/预算/);
   await assert.rejects(()=>plannerAPI({sessionId:result.sessionId,action:'confirm',slots:{}}),/补充/);
-  const shortDay=day('大馆');shortDay.cost.stay=0;shortDay.stops[0].time='+00:00–+01:00';
+  const shortDay=day('大馆');shortDay.cost.stay=0;shortDay.stops[0].durationMinutes=60;
   assert.doesNotThrow(()=>validatePlan({title:'中环',days:[shortDay]},{mode:'now',hours:3}));
-  shortDay.stops[0].time='+00:00–+04:00';
+  shortDay.stops[0].durationMinutes=240;
   assert.throws(()=>validatePlan({title:'中环',days:[shortDay]},{mode:'now',hours:3}),/超出/);
 });
 test('模型失败不覆盖原方案',async()=>{
@@ -397,12 +492,12 @@ test('模型失败不覆盖原方案',async()=>{
 });
 test('校验失败时带驳回原因自动重试，修正后通过',async()=>{
   const first=await plannerAPI({message:'香港再去一次'},{callModel:async()=>({slots,revisit:{visitedBefore:true,wantsIdeas:false,direction:'街区'}})});
-  const overlapping={...day('重叠日'),stops:[{time:'10:00–10:30',name:'甲',note:'先逛'},{time:'10:15–11:00',name:'乙',note:'再逛'}]};
+  const tooShort={...day('过短日'),stops:[{durationMinutes:30,name:'甲',note:'先逛'},{durationMinutes:45,name:'乙',note:'再逛'}]};
   let calls=0;
   const result=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots},{callModel:async messages=>{
     calls++;
-    if(calls===1)return {title:'重叠版',days:[overlapping,day('第二日')]};
-    assert.ok(messages.length>2&&/时段重叠/.test(messages.at(-1).content),'重试消息应携带驳回原因');
+    if(calls===1)return {title:'过短版',days:[tooShort,day('第二日')]};
+    assert.ok(messages.length>2&&/4–6小时/.test(messages.at(-1).content),'重试消息应携带驳回原因');
     return structuredClone(plan);
   }});
   assert.equal(calls,2);
@@ -412,8 +507,8 @@ test('校验失败时带驳回原因自动重试，修正后通过',async()=>{
 test('偏好片区只校验至少一天覆盖，不再用地名判断多日范围重复',async()=>{
   const areaSlots={...slots,area:'旺角'};
   const allInArea={title:'全旺角',days:[
-    {title:'旺角市集',city:'香港',stops:[{time:'10:00–11:00',name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},
-    {title:'旺角旧楼',city:'香港',stops:[{time:'10:00–11:00',name:'旺角花墟道',mapQuery:'Flower Market Road',note:'看花墟'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}}
+    {title:'旺角市集',city:'香港',stops:[{durationMinutes:300,name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},
+    {title:'旺角旧楼',city:'香港',stops:[{durationMinutes:300,name:'旺角花墟道',mapQuery:'Flower Market Road',note:'看花墟'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}}
   ]};
   const first=await plannerAPI({message:'香港再去，主要在旺角附近'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:false,direction:'旺角慢逛'}})});
   let calls=0;
@@ -430,8 +525,8 @@ test('偏好片区只校验至少一天覆盖，不再用地名判断多日范�
 test('全程片区约束仍可生成，空间多样性另由坐标规则校验',async()=>{
   const areaSlots={...slots,area:'旺角',areaScope:'all'};
   const allInArea={title:'全旺角',days:[
-    {title:'旺角市集',city:'香港',stops:[{time:'10:00–11:00',name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},
-    {title:'旺角旧楼',city:'香港',stops:[{time:'10:00–11:00',name:'旺角花墟道',mapQuery:'Flower Market Road',note:'看花墟'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}}
+    {title:'旺角市集',city:'香港',stops:[{durationMinutes:300,name:'旺角金鱼街',mapQuery:'Goldfish Market Hong Kong',note:'看市集'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}},
+    {title:'旺角旧楼',city:'香港',stops:[{durationMinutes:300,name:'旺角花墟道',mapQuery:'Flower Market Road',note:'看花墟'}],hotel:'旺角住宿',food:'旺角小吃',transport:'步行',cost:{stay:500,food:200,transport:50,activities:0}}
   ]};
   const first=await plannerAPI({message:'香港再去，这几天都待在旺角附近'},{callModel:async()=>({slots:areaSlots,revisit:{visitedBefore:true,wantsIdeas:false,direction:'旺角慢逛'}})});
   const result=await plannerAPI({sessionId:first.sessionId,action:'confirm',slots:areaSlots},{callModel:async()=>structuredClone(allInArea)});

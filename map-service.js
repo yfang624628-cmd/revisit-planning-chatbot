@@ -81,6 +81,15 @@ function mapSearchNames(stop){
   const candidates=stop.name.split(/[与和·（(]/).map(name=>name.replace(/(?:区域|周边|附近|一带|沿岸步道|河畔步道|街区|小巷本地小店|本地小店|散步|游览)$/,'').trim()).filter(Boolean);
   return [...new Set(candidates.length?candidates:[stop.name])];
 }
+function straightLineDistance(points){
+  const radians=value=>value*Math.PI/180;
+  return Math.round(points.slice(1).reduce((total,point,index)=>{
+    const previous=points[index],lat1=radians(previous.lat),lat2=radians(point.lat);
+    const deltaLat=lat2-lat1,deltaLon=radians(point.lon-previous.lon);
+    const value=Math.sin(deltaLat/2)**2+Math.cos(lat1)*Math.cos(lat2)*Math.sin(deltaLon/2)**2;
+    return total+2*6371000*Math.atan2(Math.sqrt(value),Math.sqrt(1-value));
+  },0));
+}
 export async function locateStopsForDay(day,destination,{geocodePlace=geocode}={}){
   const located=[];const unresolved=[];
   let serviceWarning='',lookupFailed=false;
@@ -105,6 +114,7 @@ export async function routeForDay(day,destination,{geocodePlace=geocode,routeReq
   const located=location.points,unresolved=location.unresolved;
   let serviceWarning=location.serviceWarning;
   let distance=null,duration=null,geometry=[],segments=[],routeUnavailable=false,includesFerry=false;
+  const estimatedDistance=located.length>=2?straightLineDistance(located):null;
   if(located.length>=2){
     const coordinates=located.map(point=>point.lon+','+point.lat).join(';');
     const base=process.env.FOOT_ROUTER_URL||'https://routing.openstreetmap.de/routed-foot';
@@ -122,7 +132,7 @@ export async function routeForDay(day,destination,{geocodePlace=geocode,routeReq
       includesFerry=route.legs?.some(leg=>leg.steps?.some(step=>step.mode==='ferry'))||false;
     }else routeUnavailable=true;
   }
-  const answer={points:located,unresolved,distance,duration,geometry,segments,routeUnavailable,includesFerry,serviceWarning,totalStops:day.stops.length,mode:'walking',verifiedAt:new Date().toISOString()};
+  const answer={points:located,unresolved,distance,duration,estimatedDistance,geometry,segments,routeUnavailable,includesFerry,serviceWarning,totalStops:day.stops.length,mode:'walking',verifiedAt:new Date().toISOString()};
   if(routeCache.size>=100)routeCache.delete(routeCache.keys().next().value);
   if(!serviceWarning)routeCache.set(cacheKey,answer);
   return answer;

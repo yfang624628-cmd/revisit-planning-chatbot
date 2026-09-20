@@ -30,7 +30,8 @@ export async function validateSpatialDiversity(plan,destination,rule,locateDay){
   for(let left=0;left<pointSets.length;left++)for(let right=left+1;right<pointSets.length;right++){
     const overlap=activityOverlapRatio(pointSets[left],pointSets[right],rule.activityRadiusMeters);
     if(overlap>rule.maxOverlapRatio){
-      throw Object.assign(new Error(`第 ${left+1} 天和第 ${right+1} 天的活动范围重叠 ${Math.round(overlap*100)}%，超过配置上限 ${Math.round(rule.maxOverlapRatio*100)}%，原方案未改变。`),{status:502});
+      const nearStops=pointSets[left].filter(point=>pointSets[right].some(other=>distanceMeters(point,other)<=rule.activityRadiusMeters)).map(point=>point.name).filter(Boolean);
+      throw Object.assign(new Error(`第 ${left+1} 天和第 ${right+1} 天的活动范围重叠 ${Math.round(overlap*100)}%，超过配置上限 ${Math.round(rule.maxOverlapRatio*100)}%（过近地点：${nearStops.join('、')}）。`),{status:502,code:'ACTIVITY_OVERLAP',conflict:{days:[left,right],radiusMeters:rule.activityRadiusMeters,maxOverlapRatio:rule.maxOverlapRatio,points:pointSets}});
     }
   }
 }
